@@ -1,0 +1,14 @@
+# Rust
+/target
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Cargo lock file (if you want to commit it, remove this line)
+Cargo.lock 
