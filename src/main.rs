@@ -127,7 +127,7 @@ impl SwapBytesNode {
             println!("Kademlia bootstrap failed: {}. Relying on mDNS for peer discovery.", e);
         }
 
-        let mut node = SwapBytesNode {
+        let node = SwapBytesNode {
             swarm,
             nickname,
             peer_nicknames: HashMap::new(),
