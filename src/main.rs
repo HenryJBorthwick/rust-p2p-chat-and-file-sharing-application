@@ -23,7 +23,7 @@ use tokio::io::{self, AsyncBufReadExt};
 use tokio::select;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tokio::time::interval; // Fixed: Removed unused Interval
+use tokio::time::interval;
 
 #[derive(Parser, Debug)]
 struct Cli {
@@ -149,7 +149,7 @@ impl SwapBytesNode {
 
     async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut stdin = io::BufReader::new(io::stdin()).lines();
-        let mut retry_interval = interval(Duration::from_secs(5));
+        let mut announcement_interval = interval(Duration::from_secs(10));
 
         loop {
             select! {
@@ -161,17 +161,20 @@ impl SwapBytesNode {
                 event = self.swarm.select_next_some() => {
                     self.handle_event(event).await?;
                 }
-                _ = retry_interval.tick(), if !self.nickname_announced => {
+                _ = announcement_interval.tick() => {
                     match self.announce_nickname().await {
                         Ok(_) => {
-                            self.nickname_announced = true;
-                            println!("Nickname '{}' announced successfully.", self.nickname);
+                            if !self.nickname_announced {
+                                self.nickname_announced = true;
+                                println!("Nickname '{}' announced successfully.", self.nickname);
+                            }
+                            // Silently re-announce periodically
                         }
                         Err(e) if e.to_string().contains("InsufficientPeers") => {
-                            println!("Still insufficient peers for Gossipsub. Retrying in 5 seconds...");
+                            println!("Insufficient peers for Gossipsub. Retrying in 10 seconds...");
                         }
                         Err(e) => {
-                            println!("Error announcing nickname: {}. Will retry.", e);
+                            println!("Error announcing nickname: {}. Will retry in 10 seconds.", e);
                         }
                     }
                 }
@@ -237,8 +240,11 @@ impl SwapBytesNode {
             }
             "/list" => {
                 println!("Known peers:");
+                let local_peer_id = *self.swarm.local_peer_id();
                 for (peer_id, nick) in &self.peer_nicknames {
-                    println!("- {}: {}", nick, peer_id);
+                    if *peer_id != local_peer_id {
+                        println!("- {}: {}", nick, peer_id);
+                    }
                 }
             }
             _ => println!("Unknown command: {}", parts[0]),
@@ -262,22 +268,35 @@ impl SwapBytesNode {
                 println!("Connected to peer: {}", peer_id);
             }
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::Gossipsub(gossipsub::Event::Message {
-                propagation_source,
                 message,
                 ..
             })) => {
                 let msg = String::from_utf8_lossy(&message.data);
-                if msg.starts_with("JOIN ") {
-                    let nickname = msg.trim_start_matches("JOIN ").to_string();
-                    self.peer_nicknames.insert(propagation_source, nickname.clone());
-                    println!("{} ({}) joined the chat.", nickname, propagation_source);
-                } else {
-                    if let Some(n) = self.peer_nicknames.get(&propagation_source) {
-                        println!("Chat [{}]: {}", n, msg);
+                if let Some(source) = message.source {
+                    if msg.starts_with("JOIN ") {
+                        let nickname = msg.trim_start_matches("JOIN ").to_string();
+                        if self.peer_nicknames.contains_key(&source) {
+                            // Peer already known, silently update nickname if changed
+                            let existing_nick = self.peer_nicknames.get(&source).unwrap();
+                            if existing_nick != &nickname {
+                                self.peer_nicknames.insert(source, nickname.clone());
+                                println!("Peer {} changed nickname to {}", source, nickname);
+                            }
+                            // No redundant join message
+                        } else {
+                            // New peer, add to map and announce
+                            self.peer_nicknames.insert(source, nickname.clone());
+                            println!("{} ({}) joined the chat.", nickname, source);
+                        }
                     } else {
-                        let prop_str = propagation_source.to_string();
-                        println!("Chat [{}]: {}", prop_str, msg);
+                        if let Some(n) = self.peer_nicknames.get(&source) {
+                            println!("Chat [{}]: {}", n, msg);
+                        } else {
+                            println!("Chat [{}]: {}", source, msg);
+                        }
                     }
+                } else {
+                    println!("Received message without source: {}", msg);
                 }
             }
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::RequestResponse(
