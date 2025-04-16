@@ -26,3 +26,21 @@ Alice sees: Peers: [Bob]
 
 Alice: /listpeers
 Bob sees: Peers: [Alice]
+
+
+
+to check if works across different networks:
+cargo run
+BootstrapPeer
+
+cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
+Bob
+
+cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
+Alice
+
+
+## Notes
+
+local discovery just use cargo run or is a potential bootstrap node
+to connect across networks, need to use -- bootstrap <address> to connect
