@@ -191,7 +191,8 @@ impl SwapBytesNode {
 
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let backend = CrosstermBackend::new(std::io::stdout());
+        let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
 
         let mut announcement_interval = interval(Duration::from_secs(10));
@@ -274,6 +275,7 @@ impl SwapBytesNode {
 
         execute!(std::io::stdout(), LeaveAlternateScreen)?;
         disable_raw_mode()?;
+        terminal.show_cursor()?;
         Ok(())
     }
 
