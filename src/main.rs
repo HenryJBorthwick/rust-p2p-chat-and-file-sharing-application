@@ -186,6 +186,15 @@ impl SwapBytesNode {
             auto_scroll: true,
         };
 
+        // Send initial help messages
+        tx.send("[SYSTEM]: Available Commands:".to_string()).await?;
+        tx.send("[SYSTEM]: - /chat <message> - Send a message to all peers".to_string()).await?;
+        tx.send("[SYSTEM]: - /dm <nickname> <message> - Send a direct message to a specific peer".to_string()).await?;
+        tx.send("[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file from a peer".to_string()).await?;
+        tx.send("[SYSTEM]: - /list - List all known peers".to_string()).await?;
+        tx.send("[SYSTEM]: - /help - Display this help message".to_string()).await?;
+        tx.send("[SYSTEM]: - Press 'q' to quit".to_string()).await?;
+
         // Event Handling: Setup keyboard input processing
         let (tx_event, mut rx_event) = mpsc::channel(100);
         let event_tx = tx_event.clone();
@@ -319,6 +328,15 @@ impl SwapBytesNode {
         }
 
         match parts[0] {
+            "/help" => {
+                tx.send("\nAvailable Commands:".to_string()).await?;
+                tx.send("- /chat <message> - Send a message to all peers".to_string()).await?;
+                tx.send("- /dm <nickname> <message> - Send a direct message to a specific peer".to_string()).await?;
+                tx.send("- /getfile <nickname> <file_name> <local_path> - Request a file from a peer".to_string()).await?;
+                tx.send("- /list - List all known peers".to_string()).await?;
+                tx.send("- /help - Display this help message".to_string()).await?;
+                tx.send("- Press 'q' to quit".to_string()).await?;
+            }
             "/chat" => {
                 if parts.len() > 1 {
                     let message = parts[1..].join(" ");
