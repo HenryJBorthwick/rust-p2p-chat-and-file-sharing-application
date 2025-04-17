@@ -18,4 +18,8 @@ Peers that have connected for a trade in the chat room should be able to send di
 
 Once peers have agreed to swap files they should be able to send the files to each other using a request/response pattern.
 
-You will need a mechanism to bootstrap your network, so peers can discover each other. You can use mDNS, but there should be some way to potentially connect to another peer not on the same local area network. You might use a rendezvous server for peer discovery for that. However, you do not need to implement NAT traversal (hole punching).
+You will need a mechanism to bootstrap your network, so peers can discover each other. You can use mDNS, but there should be some way to potentially connect to another peer not on the same local area network. You might use a rendezvous server for peer discovery for that. However, you do not need to implement NAT traversal (hole punching)
+
+**Bonus requirements**
+Implement peer discovery with a kademlia DHT and/or using hole punching.
+Create an advanced user interface using a library such as Ratatui https://github.com/ratatui-org/ratatui

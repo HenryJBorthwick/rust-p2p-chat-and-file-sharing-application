@@ -228,7 +228,14 @@ impl SwapBytesNode {
                 event = rx_event.recv() => {
                     if let Some(Event::Key(key_event)) = event {
                         match key_event.code {
-                            KeyCode::Char('q') => break,  // Quit application
+                            KeyCode::Char('q') => {
+                                // Only quit if 'q' is pressed on its own (no input buffer)
+                                if state.input.is_empty() {
+                                    break;
+                                } else {
+                                    state.input.push('q');
+                                }
+                            },
                             KeyCode::Char(c) => state.input.push(c),  // Text input
                             KeyCode::Backspace => { state.input.pop(); },  // Delete character
                             KeyCode::Enter => {  // Send message
