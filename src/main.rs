@@ -76,6 +76,7 @@ impl fmt::Display for SwapBytesResponse {
 
 impl Error for SwapBytesResponse {}
 
+// TUI State and Interface Start
 struct TuiState {
     messages: Vec<String>,
     input: String,
@@ -168,6 +169,7 @@ impl SwapBytesNode {
     }
 
     async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // TUI Setup: Channels, State, Event Loop
         let (tx, mut rx) = mpsc::channel(100);
         let mut state = TuiState {
             messages: vec![],
@@ -178,6 +180,7 @@ impl SwapBytesNode {
         let (tx_event, mut rx_event) = mpsc::channel(100);
         let event_tx = tx_event.clone();
         
+        // TUI Event Handler
         tokio::spawn(async move {
             loop {
                 if event::poll(Duration::from_millis(100)).unwrap() {
@@ -189,6 +192,7 @@ impl SwapBytesNode {
             }
         });
 
+        // TUI Terminal Setup
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(std::io::stdout());
@@ -197,8 +201,10 @@ impl SwapBytesNode {
 
         let mut announcement_interval = interval(Duration::from_secs(10));
 
+        // TUI Main Loop
         loop {
             select! {
+                // TUI Event Handling: Key Input, Scrolling
                 event = rx_event.recv() => {
                     if let Some(Event::Key(key_event)) = event {
                         match key_event.code {
@@ -242,12 +248,14 @@ impl SwapBytesNode {
                 }
             }
 
+            // TUI Rendering: Message Display, Input Box
             terminal.draw(|f| {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Min(0), Constraint::Length(3)])
                     .split(f.area());
 
+                // Message Display with Styling
                 let messages: Vec<Line> = state.messages.iter().map(|m| {
                     if m.starts_with("[SYSTEM]") {
                         Line::from(Span::styled(m.clone(), Style::default().fg(Color::Gray)))
@@ -262,17 +270,20 @@ impl SwapBytesNode {
                 let max_scroll = num_lines.saturating_sub(area_height);
                 state.scroll = state.scroll.min(max_scroll);
 
+                // Message Block with Scroll
                 let message_block = Paragraph::new(Text::from(messages))
                     .block(Block::default().title("SwapBytes Chat").borders(Borders::ALL))
                     .scroll((state.scroll as u16, 0));
                 f.render_widget(message_block, chunks[0]);
 
+                // Input Box
                 let input_block = Paragraph::new(format!("> {}", state.input))
                     .block(Block::default().title("Input").borders(Borders::ALL));
                 f.render_widget(input_block, chunks[1]);
             })?;
         }
 
+        // TUI Cleanup
         execute!(std::io::stdout(), LeaveAlternateScreen)?;
         disable_raw_mode()?;
         terminal.show_cursor()?;
