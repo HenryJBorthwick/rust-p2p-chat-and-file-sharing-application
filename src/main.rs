@@ -39,30 +39,33 @@ use crossterm::{
     execute,
 };
 
+// CLI Configuration: Command line argument parsing
 #[derive(Parser, Debug)]
 struct Cli {
     #[arg(long)]
     bootstrap: Option<Multiaddr>,
 }
 
+// Network Protocol: Core networking components and message types
 #[derive(NetworkBehaviour)]
 struct SwapBytesBehaviour {
-    mdns: mdns::tokio::Behaviour,
-    kademlia: kad::Behaviour<MemoryStore>,
-    gossipsub: gossipsub::Behaviour,
-    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>,
+    mdns: mdns::tokio::Behaviour,        // Local network peer discovery
+    kademlia: kad::Behaviour<MemoryStore>, // DHT for peer routing
+    gossipsub: gossipsub::Behaviour,     // Pub/sub messaging
+    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>, // Direct peer communication
 }
 
+// Message Types: Protocol message definitions
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesRequest {
-    DirectMessage(String),
-    FileRequest(String),
+    DirectMessage(String),  // Private chat messages
+    FileRequest(String),    // File transfer requests
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesResponse {
-    Ack,
-    FileData(Vec<u8>),
+    Ack,                   // Message acknowledgment
+    FileData(Vec<u8>),     // File content
 }
 
 impl fmt::Display for SwapBytesResponse {
@@ -76,22 +79,25 @@ impl fmt::Display for SwapBytesResponse {
 
 impl Error for SwapBytesResponse {}
 
+// UI State: Terminal interface state management
 struct TuiState {
-    messages: Vec<String>,
-    input: String,
-    scroll: usize,
-    auto_scroll: bool, // Added to manage auto-scrolling behavior
+    messages: Vec<String>,  // Chat message history
+    input: String,         // Current input buffer
+    scroll: usize,         // Current scroll position
+    auto_scroll: bool,     // Auto-scroll to bottom on new messages
 }
 
+// Node State: Main peer node state and management
 struct SwapBytesNode {
-    swarm: libp2p::Swarm<SwapBytesBehaviour>,
-    nickname: String,
-    peer_nicknames: HashMap<PeerId, String>,
-    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>,
-    nickname_announced: bool,
+    swarm: libp2p::Swarm<SwapBytesBehaviour>,  // Network swarm instance
+    nickname: String,                          // User's nickname
+    peer_nicknames: HashMap<PeerId, String>,   // Known peer nicknames
+    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>, // Active file transfers
+    nickname_announced: bool,                  // Nickname broadcast status
 }
 
 impl SwapBytesNode {
+    // Node Setup: Initialize network components and protocols
     async fn new(nickname: String, bootstrap: Option<Multiaddr>) -> Result<Self, Box<dyn Error>> {
         let keypair = Keypair::generate_ed25519();
         let peer_id = keypair.public().to_peer_id();
@@ -158,6 +164,7 @@ impl SwapBytesNode {
         Ok(node)
     }
 
+    // Peer Management: Broadcast nickname to network
     async fn announce_nickname(&mut self) -> Result<(), Box<dyn Error>> {
         let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
         let message = format!("JOIN {}", self.nickname);
@@ -168,18 +175,22 @@ impl SwapBytesNode {
         Ok(())
     }
 
+    // Main Loop: Terminal UI and network event handling
     async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // UI Setup: Initialize channels and state
         let (tx, mut rx) = mpsc::channel(100);
         let mut state = TuiState {
             messages: vec![],
             input: String::new(),
             scroll: 0,
-            auto_scroll: true, // Initialize auto_scroll to true
+            auto_scroll: true,
         };
 
+        // Event Handling: Setup keyboard input processing
         let (tx_event, mut rx_event) = mpsc::channel(100);
         let event_tx = tx_event.clone();
         
+        // Input Processing: Handle keyboard events
         tokio::spawn(async move {
             loop {
                 if event::poll(Duration::from_millis(100)).unwrap() {
@@ -191,47 +202,54 @@ impl SwapBytesNode {
             }
         });
 
+        // Terminal Setup: Configure terminal for TUI
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(std::io::stdout());
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
 
+        // Network Maintenance: Periodic nickname announcements
         let mut announcement_interval = interval(Duration::from_secs(10));
 
+        // Main Event Loop: Process UI and network events
         loop {
             select! {
+                // UI Events: Handle keyboard input
                 event = rx_event.recv() => {
                     if let Some(Event::Key(key_event)) = event {
                         match key_event.code {
-                            KeyCode::Char('q') => break,
-                            KeyCode::Char(c) => state.input.push(c),
-                            KeyCode::Backspace => { state.input.pop(); },
-                            KeyCode::Enter => {
+                            KeyCode::Char('q') => break,  // Quit application
+                            KeyCode::Char(c) => state.input.push(c),  // Text input
+                            KeyCode::Backspace => { state.input.pop(); },  // Delete character
+                            KeyCode::Enter => {  // Send message
                                 self.handle_input(&state.input, &tx).await?;
                                 state.input.clear();
                             },
-                            KeyCode::Up => {
+                            KeyCode::Up => {  // Scroll up
                                 state.scroll = state.scroll.saturating_sub(1);
                             },
-                            KeyCode::Down => {
+                            KeyCode::Down => {  // Scroll down
                                 state.scroll += 1;
                             },
                             _ => {},
                         }
                     }
                 }
+                // Network Events: Process incoming messages
                 swarm_event = self.swarm.select_next_some() => {
                     self.handle_event(swarm_event, &tx).await?;
                 }
+                // Message Display: Show new messages
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
                         state.messages.push(msg);
                         if state.auto_scroll {
-                            state.scroll = usize::MAX; // Trigger scroll to bottom
+                            state.scroll = usize::MAX;  // Auto-scroll to bottom
                         }
                     }
                 }
+                // Network Maintenance: Periodic nickname broadcast
                 _ = announcement_interval.tick() => {
                     match self.announce_nickname().await {
                         Ok(_) => {
@@ -247,12 +265,15 @@ impl SwapBytesNode {
                 }
             }
 
+            // UI Rendering: Update terminal display
             terminal.draw(|f| {
+                // Layout: Split screen into message and input areas
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Min(0), Constraint::Length(3)])
                     .split(f.area());
 
+                // Message Styling: Color code different message types
                 let messages: Vec<Line> = state.messages.iter().map(|m| {
                     if m.starts_with("[SYSTEM]") {
                         Line::from(Span::styled(m.clone(), Style::default().fg(Color::Gray)))
@@ -262,29 +283,35 @@ impl SwapBytesNode {
                         Line::from(m.clone())
                     }
                 }).collect();
+
+                // Scroll Management: Handle message scrolling
                 let num_lines = messages.len();
-                let inner_height = chunks[0].height.saturating_sub(2) as usize; // Account for borders
+                let inner_height = chunks[0].height.saturating_sub(2) as usize;
                 let max_scroll = num_lines.saturating_sub(inner_height);
                 state.scroll = state.scroll.min(max_scroll);
-                state.auto_scroll = state.scroll == max_scroll; // Update auto_scroll flag
+                state.auto_scroll = state.scroll == max_scroll;
 
+                // Message Display: Show chat messages
                 let message_block = Paragraph::new(Text::from(messages))
                     .block(Block::default().title("SwapBytes Chat").borders(Borders::ALL))
                     .scroll((state.scroll as u16, 0));
                 f.render_widget(message_block, chunks[0]);
 
+                // Input Display: Show current input
                 let input_block = Paragraph::new(format!("> {}", state.input))
                     .block(Block::default().title("Input").borders(Borders::ALL));
                 f.render_widget(input_block, chunks[1]);
             })?;
         }
 
+        // Cleanup: Restore terminal state
         execute!(std::io::stdout(), LeaveAlternateScreen)?;
         disable_raw_mode()?;
         terminal.show_cursor()?;
         Ok(())
     }
 
+    // Command Processing: Handle user commands
     async fn handle_input(&mut self, line: &str, tx: &mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.is_empty() {
@@ -359,6 +386,7 @@ impl SwapBytesNode {
         Ok(())
     }
 
+    // Network Event Processing: Handle network messages
     async fn handle_event(&mut self, event: SwarmEvent<SwapBytesBehaviourEvent>, tx: &mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
@@ -453,6 +481,7 @@ impl SwapBytesNode {
     }
 }
 
+// Program Entry: Initialize and run the node
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
