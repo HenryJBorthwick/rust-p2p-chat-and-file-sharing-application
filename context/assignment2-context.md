@@ -23,3 +23,4 @@ You will need a mechanism to bootstrap your network, so peers can discover each 
 **Bonus requirements**
 Implement peer discovery with a kademlia DHT and/or using hole punching.
 Create an advanced user interface using a library such as Ratatui https://github.com/ratatui-org/ratatui
+Another relevant feature you come up with that demonstrates either: A new aspect of the Rust language or new use of a Rust crate, or A feature of libp2p, not otherwise used.

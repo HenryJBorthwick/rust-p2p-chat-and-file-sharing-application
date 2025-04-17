@@ -28,7 +28,7 @@ use tokio::sync::mpsc;
 use ratatui::{
     backend::CrosstermBackend,
     Terminal,
-    widgets::{Paragraph, Block, Borders, Wrap},
+    widgets::{Paragraph, Block, Borders, Wrap, List, ListItem},
     layout::{Layout, Direction, Constraint},
     style::{Style, Color},
     text::{Text, Line, Span},
@@ -38,34 +38,35 @@ use crossterm::{
     terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
 };
+use chrono::Local;
 
-// CLI Configuration: Command line argument parsing
+// CLI Configuration
 #[derive(Parser, Debug)]
 struct Cli {
     #[arg(long)]
     bootstrap: Option<Multiaddr>,
 }
 
-// Network Protocol: Core networking components and message types
+// Network Protocol
 #[derive(NetworkBehaviour)]
 struct SwapBytesBehaviour {
-    mdns: mdns::tokio::Behaviour,        // Local network peer discovery
-    kademlia: kad::Behaviour<MemoryStore>, // DHT for peer routing
-    gossipsub: gossipsub::Behaviour,     // Pub/sub messaging
-    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>, // Direct peer communication
+    mdns: mdns::tokio::Behaviour,
+    kademlia: kad::Behaviour<MemoryStore>,
+    gossipsub: gossipsub::Behaviour,
+    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>,
 }
 
-// Message Types: Protocol message definitions
+// Message Types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesRequest {
-    DirectMessage(String),  // Private chat messages
-    FileRequest(String),    // File transfer requests
+    DirectMessage(String),
+    FileRequest(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesResponse {
-    Ack,                   // Message acknowledgment
-    FileData(Vec<u8>),     // File content
+    Ack,
+    FileData(Vec<u8>),
 }
 
 impl fmt::Display for SwapBytesResponse {
@@ -79,26 +80,31 @@ impl fmt::Display for SwapBytesResponse {
 
 impl Error for SwapBytesResponse {}
 
-// UI State: Terminal interface state management
-struct TuiState {
-    messages: Vec<String>,  // Chat message history
-    input: String,         // Current input buffer
-    scroll: usize,         // Current scroll position
-    auto_scroll: bool,     // Auto-scroll to bottom on new messages
+// Chat Message Structure
+struct ChatMessage {
+    timestamp: String,
+    content: String,
 }
 
-// Node State: Main peer node state and management
+// UI State
+struct TuiState {
+    messages: Vec<ChatMessage>,
+    input: String,
+    scroll: u16,
+    auto_scroll: bool,
+}
+
+// Node State
 struct SwapBytesNode {
-    swarm: libp2p::Swarm<SwapBytesBehaviour>,  // Network swarm instance
-    nickname: String,                          // User's nickname
-    peer_nicknames: HashMap<PeerId, String>,   // Known peer nicknames
-    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>, // Active file transfers
-    nickname_announced: bool,                  // Nickname broadcast status
-    bootstrap_message: Option<String>,            // Bootstrap message
+    swarm: libp2p::Swarm<SwapBytesBehaviour>,
+    nickname: String,
+    peer_nicknames: HashMap<PeerId, String>,
+    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>,
+    nickname_announced: bool,
+    bootstrap_message: Option<String>,
 }
 
 impl SwapBytesNode {
-    // Node Setup: Initialize network components and protocols
     async fn new(nickname: String, bootstrap: Option<Multiaddr>) -> Result<(Self, String), Box<dyn Error>> {
         let keypair = Keypair::generate_ed25519();
         let peer_id = keypair.public().to_peer_id();
@@ -153,7 +159,7 @@ impl SwapBytesNode {
 
         let mut bootstrap_message = String::new();
         if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-            bootstrap_message = format!("[SYSTEM]: Kademlia bootstrap failed: {}. Relying on mDNS for peer discovery.", e);
+            bootstrap_message = format!("[SYSTEM]: Kademlia bootstrap failed: {}. Relying on mDNS.", e);
         }
 
         let node = SwapBytesNode {
@@ -167,7 +173,6 @@ impl SwapBytesNode {
         Ok((node, bootstrap_message))
     }
 
-    // Peer Management: Broadcast nickname to network
     async fn announce_nickname(&mut self) -> Result<(), Box<dyn Error>> {
         let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
         let message = format!("JOIN {}", self.nickname);
@@ -178,10 +183,8 @@ impl SwapBytesNode {
         Ok(())
     }
 
-    // Main Loop: Terminal UI and network event handling
     async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // UI Setup: Initialize channels and state
-        let (tx, mut rx) = mpsc::channel(100);
+        let (tx, mut rx) = mpsc::channel::<ChatMessage>(100);
         let mut state = TuiState {
             messages: vec![],
             input: String::new(),
@@ -189,25 +192,25 @@ impl SwapBytesNode {
             auto_scroll: true,
         };
 
-        // Send initial help messages
-        tx.send("[SYSTEM]: Available Commands:".to_string()).await?;
-        tx.send("[SYSTEM]: - /chat <message> - Send a message to all peers".to_string()).await?;
-        tx.send("[SYSTEM]: - /dm <nickname> <message> - Send a direct message to a specific peer".to_string()).await?;
-        tx.send("[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file from a peer".to_string()).await?;
-        tx.send("[SYSTEM]: - /list - List all known peers".to_string()).await?;
-        tx.send("[SYSTEM]: - /help - Display this help message".to_string()).await?;
-        tx.send("[SYSTEM]: - Press 'q' to quit".to_string()).await?;
+        // Initial help messages
+        let timestamp = Local::now().format("%H:%M:%S").to_string();
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Available Commands:".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /chat <message> - Send a message to all peers".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /dm <nickname> <message> - Send a direct message".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /list - List all known peers".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /help - Display this help message".to_string() }).await?;
+        tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Press 'q' to quit".to_string() }).await?;
 
-        // Send bootstrap message if it exists
         if let Some(bootstrap_message) = self.bootstrap_message.take() {
-            tx.send(bootstrap_message).await?;
+            tx.send(ChatMessage {
+                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                content: bootstrap_message,
+            }).await?;
         }
 
-        // Event Handling: Setup keyboard input processing
         let (tx_event, mut rx_event) = mpsc::channel(100);
         let event_tx = tx_event.clone();
-        
-        // Input Processing: Handle keyboard events
         tokio::spawn(async move {
             loop {
                 if event::poll(Duration::from_millis(100)).unwrap() {
@@ -219,139 +222,177 @@ impl SwapBytesNode {
             }
         });
 
-        // Terminal Setup: Configure terminal for TUI
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(std::io::stdout());
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
 
-        // Network Maintenance: Periodic nickname announcements
         let mut announcement_interval = interval(Duration::from_secs(10));
 
-        // Main Event Loop: Process UI and network events
         loop {
             select! {
-                // UI Events: Handle keyboard input
                 event = rx_event.recv() => {
                     if let Some(Event::Key(key_event)) = event {
                         match key_event.code {
                             KeyCode::Char('q') => {
-                                // Only quit if 'q' is pressed on its own (no input buffer)
                                 if state.input.is_empty() {
                                     break;
                                 } else {
                                     state.input.push('q');
                                 }
                             },
-                            KeyCode::Char(c) => state.input.push(c),  // Text input
-                            KeyCode::Backspace => { state.input.pop(); },  // Delete character
-                            KeyCode::Enter => {  // Send message
+                            KeyCode::Char('G') => {
+                                state.scroll = u16::MAX;
+                                state.auto_scroll = true;
+                            },
+                            KeyCode::Char(c) => state.input.push(c),
+                            KeyCode::Backspace => { state.input.pop(); },
+                            KeyCode::Enter => {
                                 self.handle_input(&state.input, &tx).await?;
                                 state.input.clear();
                             },
-                            KeyCode::Up => {  // Scroll up
+                            KeyCode::Up => {
                                 state.scroll = state.scroll.saturating_sub(1);
                             },
-                            KeyCode::Down => {  // Scroll down
-                                state.scroll += 1;
+                            KeyCode::Down => {
+                                state.scroll = state.scroll.saturating_add(1);
                             },
                             _ => {},
                         }
                     }
                 }
-                // Network Events: Process incoming messages
                 swarm_event = self.swarm.select_next_some() => {
                     self.handle_event(swarm_event, &tx).await?;
                 }
-                // Message Display: Show new messages
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
                         state.messages.push(msg);
                         if state.auto_scroll {
-                            state.scroll = usize::MAX;  // Auto-scroll to bottom
+                            state.scroll = u16::MAX;
                         }
                     }
                 }
-                // Network Maintenance: Periodic nickname broadcast
                 _ = announcement_interval.tick() => {
                     match self.announce_nickname().await {
                         Ok(_) => {
                             if !self.nickname_announced {
-                                tx.send(format!("[SYSTEM]: Nickname '{}' announced successfully.", self.nickname)).await?;
+                                tx.send(ChatMessage {
+                                    timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                    content: format!("[SYSTEM]: Nickname '{}' announced.", self.nickname),
+                                }).await?;
                                 self.nickname_announced = true;
                             }
                         }
                         Err(e) => {
-                            tx.send(format!("[SYSTEM]: Error announcing nickname: {}", e)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[SYSTEM]: Error announcing nickname: {}", e),
+                            }).await?;
                         }
                     }
                 }
             }
 
-            // UI Rendering: Update terminal display
             terminal.draw(|f| {
-                // Layout: Split screen into message and input areas
                 let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(0), Constraint::Length(3)])
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(20),
+                        Constraint::Percentage(80),
+                    ])
                     .split(f.area());
 
-                // Message Styling: Color code different message types
-                let messages: Vec<Line> = state.messages.iter().map(|m| {
-                    if m.starts_with("[SYSTEM]") {
-                        Line::from(Span::styled(m.clone(), Style::default().fg(Color::Gray)))
-                    } else if m.starts_with("[DM from") || m.starts_with("[DM to") {
-                        Line::from(Span::styled(m.clone(), Style::default().fg(Color::Yellow)))
+                let main_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Min(0),
+                        Constraint::Length(3),
+                        Constraint::Length(1),
+                    ])
+                    .split(chunks[1]);
+
+                // Peer List Sidebar
+                let peer_list: Vec<ListItem> = self.peer_nicknames.iter()
+                    .filter(|(id, _)| *id != self.swarm.local_peer_id())
+                    .map(|(id, nick)| ListItem::new(format!("{}: {}", nick, id.to_string().chars().take(8).collect::<String>())))
+                    .collect();
+                let peer_list_widget = List::new(peer_list)
+                    .block(Block::default().title("Peers").borders(Borders::ALL))
+                    .style(Style::default().fg(Color::White));
+                f.render_widget(peer_list_widget, chunks[0]);
+
+                // Chat Messages with Timestamps
+                let messages: Vec<Line> = state.messages.iter().map(|msg| {
+                    let (prefix, content, color) = if msg.content.starts_with("[SYSTEM]") {
+                        ("[SYSTEM]", &msg.content[8..], Color::Gray)
+                    } else if msg.content.starts_with("[DM from") {
+                        ("[DM from", &msg.content[8..], Color::Yellow)
+                    } else if msg.content.starts_with("[DM to") {
+                        ("[DM to", &msg.content[6..], Color::Yellow)
                     } else {
-                        Line::from(m.clone())
-                    }
+                        ("", msg.content.as_str(), Color::White)
+                    };
+                    Line::from(vec![
+                        Span::styled(format!("[{}] ", msg.timestamp), Style::default().fg(Color::Gray)),
+                        Span::styled(prefix, Style::default().fg(Color::Cyan)),
+                        Span::styled(content, Style::default().fg(color)),
+                    ])
                 }).collect();
 
-                // Scroll Management: Handle message scrolling
-                let num_lines = messages.len();
-                let inner_height = chunks[0].height.saturating_sub(2) as usize;
+                let num_lines = messages.len() as u16;
+                let message_text = Text::from(messages);
+                let inner_height = main_chunks[0].height.saturating_sub(2); // Account for borders
                 let max_scroll = num_lines.saturating_sub(inner_height);
                 state.scroll = state.scroll.min(max_scroll);
                 state.auto_scroll = state.scroll == max_scroll;
 
-                // Message Display: Show chat messages with text wrapping
-                let message_block = Paragraph::new(Text::from(messages))
+                let message_block = Paragraph::new(message_text)
                     .block(Block::default().title("SwapBytes Chat").borders(Borders::ALL))
-                    .wrap(Wrap { trim: false }) // Enable text wrapping at word boundaries
-                    .scroll((state.scroll as u16, 0));
-                f.render_widget(message_block, chunks[0]);
+                    .scroll((state.scroll, 0));
+                f.render_widget(message_block, main_chunks[0]);
 
-                // Input Display: Show current input
+                // Input Area
                 let input_block = Paragraph::new(format!("> {}", state.input))
-                    .block(Block::default().title("Input").borders(Borders::ALL));
-                f.render_widget(input_block, chunks[1]);
+                    .block(Block::default().title("Input").borders(Borders::ALL))
+                    .style(Style::default().fg(Color::Yellow));
+                f.render_widget(input_block, main_chunks[1]);
+
+                // Status Bar
+                let status_text = if self.swarm.connected_peers().count() > 0 {
+                    format!("Connected (Peers: {})", self.swarm.connected_peers().count())
+                } else {
+                    "Disconnected".to_string()
+                };
+                let status_bar = Paragraph::new(status_text)
+                    .block(Block::default().borders(Borders::NONE))
+                    .style(Style::default().fg(Color::Green));
+                f.render_widget(status_bar, main_chunks[2]);
             })?;
         }
 
-        // Cleanup: Restore terminal state
         execute!(std::io::stdout(), LeaveAlternateScreen)?;
         disable_raw_mode()?;
         terminal.show_cursor()?;
         Ok(())
     }
 
-    // Command Processing: Handle user commands
-    async fn handle_input(&mut self, line: &str, tx: &mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    async fn handle_input(&mut self, line: &str, tx: &mpsc::Sender<ChatMessage>) -> Result<(), Box<dyn Error>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(());
         }
 
+        let timestamp = Local::now().format("%H:%M:%S").to_string();
         match parts[0] {
             "/help" => {
-                tx.send("\nAvailable Commands:".to_string()).await?;
-                tx.send("- /chat <message> - Send a message to all peers".to_string()).await?;
-                tx.send("- /dm <nickname> <message> - Send a direct message to a specific peer".to_string()).await?;
-                tx.send("- /getfile <nickname> <file_name> <local_path> - Request a file from a peer".to_string()).await?;
-                tx.send("- /list - List all known peers".to_string()).await?;
-                tx.send("- /help - Display this help message".to_string()).await?;
-                tx.send("- Press 'q' to quit".to_string()).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Available Commands:".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /chat <message> - Send a message to all peers".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /dm <nickname> <message> - Send a direct message".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /list - List all known peers".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /help - Display this help message".to_string() }).await?;
+                tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Press 'q' to quit".to_string() }).await?;
             }
             "/chat" => {
                 if parts.len() > 1 {
@@ -359,10 +400,16 @@ impl SwapBytesNode {
                     let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
                     match self.swarm.behaviour_mut().gossipsub.publish(topic, message.as_bytes()) {
                         Ok(_) => {
-                            tx.send(format!("[{}]: {}", self.nickname, message)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[{}]: {}", self.nickname, message),
+                            }).await?;
                         }
                         Err(gossipsub::PublishError::InsufficientPeers) => {
-                            tx.send("[SYSTEM]: No peers connected yet. Please wait.".to_string()).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: "[SYSTEM]: No peers connected yet. Please wait.".to_string(),
+                            }).await?;
                         }
                         Err(e) => return Err(e.into()),
                     }
@@ -379,9 +426,15 @@ impl SwapBytesNode {
                             .behaviour_mut()
                             .request_response
                             .send_request(&target_peer, SwapBytesRequest::DirectMessage(message.clone()));
-                        tx.send(format!("[DM to {}]: {}", target_nickname, message)).await?;
+                        tx.send(ChatMessage {
+                            timestamp: Local::now().format("%H:%M:%S").to_string(),
+                            content: format!("[DM to {}]: {}", target_nickname, message),
+                        }).await?;
                     } else {
-                        tx.send(format!("[SYSTEM]: Nickname '{}' not found.", target_nickname)).await?;
+                        tx.send(ChatMessage {
+                            timestamp: Local::now().format("%H:%M:%S").to_string(),
+                            content: format!("[SYSTEM]: Nickname '{}' not found.", target_nickname),
+                        }).await?;
                     }
                 }
             }
@@ -398,43 +451,69 @@ impl SwapBytesNode {
                             .request_response
                             .send_request(&target_peer, SwapBytesRequest::FileRequest(file_name.to_string()));
                         self.pending_file_requests.insert(request_id, local_path.to_string());
-                        tx.send(format!("[SYSTEM]: Requesting '{}' from {}", file_name, target_nickname)).await?;
+                        tx.send(ChatMessage {
+                            timestamp: Local::now().format("%H:%M:%S").to_string(),
+                            content: format!("[SYSTEM]: Requesting '{}' from {}", file_name, target_nickname),
+                        }).await?;
                     } else {
-                        tx.send(format!("[SYSTEM]: Nickname '{}' not found.", target_nickname)).await?;
+                        tx.send(ChatMessage {
+                            timestamp: Local::now().format("%H:%M:%S").to_string(),
+                            content: format!("[SYSTEM]: Nickname '{}' not found.", target_nickname),
+                        }).await?;
                     }
                 } else {
-                    tx.send("[SYSTEM]: Usage: /getfile <nickname> <file_name> <local_path>".to_string()).await?;
+                    tx.send(ChatMessage {
+                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                        content: "[SYSTEM]: Usage: /getfile <nickname> <file_name> <local_path>".to_string(),
+                    }).await?;
                 }
             }
             "/list" => {
-                tx.send("[SYSTEM]: Known peers:".to_string()).await?;
+                tx.send(ChatMessage {
+                    timestamp: timestamp.clone(),
+                    content: "[SYSTEM]: Known peers:".to_string(),
+                }).await?;
                 let local_peer_id = *self.swarm.local_peer_id();
                 for (peer_id, nick) in &self.peer_nicknames {
                     if *peer_id != local_peer_id {
-                        tx.send(format!("- {}: {}", nick, peer_id)).await?;
+                        tx.send(ChatMessage {
+                            timestamp: timestamp.clone(),
+                            content: format!("- {}: {}", nick, peer_id),
+                        }).await?;
                     }
                 }
             }
-            _ => tx.send(format!("[SYSTEM]: Unknown command: {}", parts[0])).await?,
+            _ => tx.send(ChatMessage {
+                timestamp,
+                content: format!("[SYSTEM]: Unknown command: {}", parts[0]),
+            }).await?,
         }
         Ok(())
     }
 
-    // Network Event Processing: Handle network messages
-    async fn handle_event(&mut self, event: SwarmEvent<SwapBytesBehaviourEvent>, tx: &mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+    async fn handle_event(&mut self, event: SwarmEvent<SwapBytesBehaviourEvent>, tx: &mpsc::Sender<ChatMessage>) -> Result<(), Box<dyn Error>> {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                tx.send(format!("[SYSTEM]: Listening on {}", address)).await?;
+                tx.send(ChatMessage {
+                    timestamp: Local::now().format("%H:%M:%S").to_string(),
+                    content: format!("[SYSTEM]: Listening on {}", address),
+                }).await?;
             }
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
-                    tx.send(format!("[SYSTEM]: Discovered peer: {} at {}", peer_id, multiaddr)).await?;
+                    tx.send(ChatMessage {
+                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                        content: format!("[SYSTEM]: Discovered peer: {} at {}", peer_id, multiaddr),
+                    }).await?;
                     self.swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr.clone());
                     self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                 }
             }
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                tx.send(format!("[SYSTEM]: Connected to peer: {}", peer_id)).await?;
+                tx.send(ChatMessage {
+                    timestamp: Local::now().format("%H:%M:%S").to_string(),
+                    content: format!("[SYSTEM]: Connected to peer: {}", peer_id),
+                }).await?;
             }
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                 message,
@@ -448,21 +527,36 @@ impl SwapBytesNode {
                             let existing_nick = self.peer_nicknames.get(&source).unwrap();
                             if existing_nick != &nickname {
                                 self.peer_nicknames.insert(source, nickname.clone());
-                                tx.send(format!("[SYSTEM]: Peer {} changed nickname to {}", source, nickname)).await?;
+                                tx.send(ChatMessage {
+                                    timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                    content: format!("[SYSTEM]: Peer {} changed nickname to {}", source, nickname),
+                                }).await?;
                             }
                         } else {
                             self.peer_nicknames.insert(source, nickname.clone());
-                            tx.send(format!("[SYSTEM]: {} ({}) joined the chat.", nickname, source)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[SYSTEM]: {} ({}) joined the chat.", nickname, source),
+                            }).await?;
                         }
                     } else {
                         if let Some(n) = self.peer_nicknames.get(&source) {
-                            tx.send(format!("[{}]: {}", n, msg)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[{}]: {}", n, msg),
+                            }).await?;
                         } else {
-                            tx.send(format!("[{}]: {}", source, msg)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[{}]: {}", source, msg),
+                            }).await?;
                         }
                     }
                 } else {
-                    tx.send(format!("[SYSTEM]: Received message without source: {}", msg)).await?;
+                    tx.send(ChatMessage {
+                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                        content: format!("[SYSTEM]: Received message without source: {}", msg),
+                    }).await?;
                 }
             }
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::RequestResponse(
@@ -473,7 +567,10 @@ impl SwapBytesNode {
                         SwapBytesRequest::DirectMessage(msg) => {
                             let peer_str = peer.to_string();
                             let sender = self.peer_nicknames.get(&peer).unwrap_or(&peer_str);
-                            tx.send(format!("[DM from {}]: {}", sender, msg)).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: format!("[DM from {}]: {}", sender, msg),
+                            }).await?;
                             self.swarm
                                 .behaviour_mut()
                                 .request_response
@@ -494,15 +591,24 @@ impl SwapBytesNode {
                 request_response::Message::Response { request_id, response } => {
                     match response {
                         SwapBytesResponse::Ack => {
-                            tx.send("[SYSTEM]: Direct message delivered.".to_string()).await?;
+                            tx.send(ChatMessage {
+                                timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                content: "[SYSTEM]: Direct message delivered.".to_string(),
+                            }).await?;
                         }
                         SwapBytesResponse::FileData(data) => {
                             if let Some(local_path) = self.pending_file_requests.remove(&request_id) {
                                 if !data.is_empty() {
                                     tokio::fs::write(&local_path, &data).await?;
-                                    tx.send(format!("[SYSTEM]: File saved to {}", local_path)).await?;
+                                    tx.send(ChatMessage {
+                                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                        content: format!("[SYSTEM]: File saved to {}", local_path),
+                                    }).await?;
                                 } else {
-                                    tx.send("[SYSTEM]: File not found or empty.".to_string()).await?;
+                                    tx.send(ChatMessage {
+                                        timestamp: Local::now().format("%H:%M:%S").to_string(),
+                                        content: "[SYSTEM]: File not found or empty.".to_string(),
+                                    }).await?;
                                 }
                             }
                         }
@@ -515,7 +621,6 @@ impl SwapBytesNode {
     }
 }
 
-// Program Entry: Initialize and run the node
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
