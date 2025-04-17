@@ -28,7 +28,7 @@ use tokio::sync::mpsc;
 use ratatui::{
     backend::CrosstermBackend,
     Terminal,
-    widgets::{Paragraph, Block, Borders},
+    widgets::{Paragraph, Block, Borders, Wrap},
     layout::{Layout, Direction, Constraint},
     style::{Style, Color},
     text::{Text, Line, Span},
@@ -315,9 +315,10 @@ impl SwapBytesNode {
                 state.scroll = state.scroll.min(max_scroll);
                 state.auto_scroll = state.scroll == max_scroll;
 
-                // Message Display: Show chat messages
+                // Message Display: Show chat messages with text wrapping
                 let message_block = Paragraph::new(Text::from(messages))
                     .block(Block::default().title("SwapBytes Chat").borders(Borders::ALL))
+                    .wrap(Wrap { trim: false }) // Enable text wrapping at word boundaries
                     .scroll((state.scroll as u16, 0));
                 f.render_widget(message_block, chunks[0]);
 
