@@ -94,11 +94,12 @@ struct SwapBytesNode {
     peer_nicknames: HashMap<PeerId, String>,   // Known peer nicknames
     pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>, // Active file transfers
     nickname_announced: bool,                  // Nickname broadcast status
+    bootstrap_message: Option<String>,            // Bootstrap message
 }
 
 impl SwapBytesNode {
     // Node Setup: Initialize network components and protocols
-    async fn new(nickname: String, bootstrap: Option<Multiaddr>) -> Result<Self, Box<dyn Error>> {
+    async fn new(nickname: String, bootstrap: Option<Multiaddr>) -> Result<(Self, String), Box<dyn Error>> {
         let keypair = Keypair::generate_ed25519();
         let peer_id = keypair.public().to_peer_id();
 
@@ -150,8 +151,9 @@ impl SwapBytesNode {
         let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
         swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
 
+        let mut bootstrap_message = String::new();
         if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
-            println!("Kademlia bootstrap failed: {}. Relying on mDNS for peer discovery.", e);
+            bootstrap_message = format!("[SYSTEM]: Kademlia bootstrap failed: {}. Relying on mDNS for peer discovery.", e);
         }
 
         let node = SwapBytesNode {
@@ -160,8 +162,9 @@ impl SwapBytesNode {
             peer_nicknames: HashMap::new(),
             pending_file_requests: HashMap::new(),
             nickname_announced: false,
+            bootstrap_message: Some(bootstrap_message.clone()),
         };
-        Ok(node)
+        Ok((node, bootstrap_message))
     }
 
     // Peer Management: Broadcast nickname to network
@@ -194,6 +197,11 @@ impl SwapBytesNode {
         tx.send("[SYSTEM]: - /list - List all known peers".to_string()).await?;
         tx.send("[SYSTEM]: - /help - Display this help message".to_string()).await?;
         tx.send("[SYSTEM]: - Press 'q' to quit".to_string()).await?;
+
+        // Send bootstrap message if it exists
+        if let Some(bootstrap_message) = self.bootstrap_message.take() {
+            tx.send(bootstrap_message).await?;
+        }
 
         // Event Handling: Setup keyboard input processing
         let (tx_event, mut rx_event) = mpsc::channel(100);
@@ -518,7 +526,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         _ => "Anonymous".to_string(),
     };
 
-    let mut node = SwapBytesNode::new(nickname, cli.bootstrap).await?;
+    let (mut node, _) = SwapBytesNode::new(nickname, cli.bootstrap).await?;
     node.run().await?;
     Ok(())
 }
