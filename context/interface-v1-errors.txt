@@ -34,7 +34,7 @@ use ratatui::{
     text::{Text, Line, Span},
 };
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent},
     terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
 };
@@ -175,20 +175,6 @@ impl SwapBytesNode {
             scroll: 0,
         };
 
-        let (tx_event, mut rx_event) = mpsc::channel(100);
-        let event_tx = tx_event.clone();
-        
-        tokio::spawn(async move {
-            loop {
-                if event::poll(Duration::from_millis(100)).unwrap() {
-                    if let Ok(event) = event::read() {
-                        let _ = event_tx.send(event).await;
-                    }
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        });
-
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
         let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
@@ -198,23 +184,25 @@ impl SwapBytesNode {
 
         loop {
             select! {
-                event = rx_event.recv() => {
-                    if let Some(Event::Key(key_event)) = event {
-                        match key_event.code {
-                            KeyCode::Char('q') => break, // Quit on 'q'
-                            KeyCode::Char(c) => state.input.push(c),
-                            KeyCode::Backspace => { state.input.pop(); },
-                            KeyCode::Enter => {
-                                self.handle_input(&state.input, &tx).await?;
-                                state.input.clear();
-                            },
-                            KeyCode::Up => {
-                                state.scroll = state.scroll.saturating_sub(1);
-                            },
-                            KeyCode::Down => {
-                                state.scroll += 1;
-                            },
-                            _ => {},
+                event = event::read() => {
+                    if let Ok(event) = event {
+                        if let Event::Key(key_event) = event {
+                            match key_event.code {
+                                KeyCode::Char('q') => break, // Quit on 'q'
+                                KeyCode::Char(c) => state.input.push(c),
+                                KeyCode::Backspace => { state.input.pop(); },
+                                KeyCode::Enter => {
+                                    self.handle_input(&state.input, &tx).await?;
+                                    state.input.clear();
+                                },
+                                KeyCode::Up => {
+                                    state.scroll = state.scroll.saturating_sub(1);
+                                },
+                                KeyCode::Down => {
+                                    state.scroll += 1;
+                                },
+                                _ => {},
+                            }
                         }
                     }
                 }
@@ -245,7 +233,7 @@ impl SwapBytesNode {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Min(0), Constraint::Length(3)])
-                    .split(f.area());
+                    .split(f.size());
 
                 let messages: Vec<Line> = state.messages.iter().map(|m| {
                     if m.starts_with("[SYSTEM]") {
@@ -401,8 +389,7 @@ impl SwapBytesNode {
                 request_response::Message::Request { request, channel, .. } => {
                     match request {
                         SwapBytesRequest::DirectMessage(msg) => {
-                            let peer_str = peer.to_string();
-                            let sender = self.peer_nicknames.get(&peer).unwrap_or(&peer_str);
+                            let sender = self.peer_nicknames.get(&peer).unwrap_or(&peer.to_string());
                             tx.send(format!("[DM from {}]: {}", sender, msg)).await?;
                             self.swarm
                                 .behaviour_mut()

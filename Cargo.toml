@@ -8,3 +8,5 @@ clap = { version = "4.4", features = ["derive"] }
 libp2p = { version = "0.53", features = ["tokio", "tcp", "noise", "yamux", "gossipsub", "kad", "mdns", "request-response", "cbor", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.35", features = ["full"] }
+ratatui = "0.29.0"
+crossterm = "0.29.0"
