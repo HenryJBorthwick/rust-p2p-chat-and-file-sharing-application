@@ -269,19 +269,28 @@ impl SwapBytesNode {
                                 }
                             },
                             Event::Mouse(mouse_event) => {
+                                let modifiers = mouse_event.modifiers;
                                 match mouse_event.kind {
                                     crossterm::event::MouseEventKind::ScrollUp => {
-                                        state.scroll = state.scroll.saturating_sub(1);
-                                        state.auto_scroll = false;
+                                        if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
+                                            state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left
+                                        } else {
+                                            state.scroll = state.scroll.saturating_sub(1); // Scroll up
+                                            state.auto_scroll = false;
+                                        }
                                     },
                                     crossterm::event::MouseEventKind::ScrollDown => {
-                                        state.scroll = state.scroll.saturating_add(1);
+                                        if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
+                                            state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right
+                                        } else {
+                                            state.scroll = state.scroll.saturating_add(1); // Scroll down
+                                        }
                                     },
                                     crossterm::event::MouseEventKind::ScrollLeft => {
-                                        state.h_scroll = state.h_scroll.saturating_add(1);
+                                        state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left (if supported)
                                     },
                                     crossterm::event::MouseEventKind::ScrollRight => {
-                                        state.h_scroll = state.h_scroll.saturating_sub(1);
+                                        state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right (if supported)
                                     },
                                     _ => {},
                                 }
