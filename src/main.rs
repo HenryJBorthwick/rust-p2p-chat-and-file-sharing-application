@@ -28,7 +28,7 @@ use tokio::sync::mpsc;
 use ratatui::{
     backend::CrosstermBackend,
     Terminal,
-    widgets::{Paragraph, Block, Borders, Wrap, List, ListItem},
+    widgets::{Paragraph, Block, Borders, List, ListItem},
     layout::{Layout, Direction, Constraint},
     style::{Style, Color},
     text::{Text, Line, Span},
