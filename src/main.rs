@@ -91,6 +91,7 @@ struct TuiState {
     messages: Vec<ChatMessage>,
     input: String,
     scroll: u16,
+    h_scroll: u16,     // Horizontal scroll
     auto_scroll: bool,
 }
 
@@ -189,6 +190,7 @@ impl SwapBytesNode {
             messages: vec![],
             input: String::new(),
             scroll: 0,
+            h_scroll: 0,
             auto_scroll: true,
         };
 
@@ -223,7 +225,7 @@ impl SwapBytesNode {
         });
 
         enable_raw_mode()?;
-        execute!(std::io::stdout(), EnterAlternateScreen)?;
+        execute!(std::io::stdout(), EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
         let backend = CrosstermBackend::new(std::io::stdout());
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
@@ -233,30 +235,56 @@ impl SwapBytesNode {
         loop {
             select! {
                 event = rx_event.recv() => {
-                    if let Some(Event::Key(key_event)) = event {
-                        match key_event.code {
-                            KeyCode::Char('q') => {
-                                if state.input.is_empty() {
-                                    break;
-                                } else {
-                                    state.input.push('q');
+                    if let Some(event) = event {
+                        match event {
+                            Event::Key(key_event) => {
+                                match key_event.code {
+                                    KeyCode::Char('q') => {
+                                        if state.input.is_empty() {
+                                            break;
+                                        } else {
+                                            state.input.push('q');
+                                        }
+                                    },
+                                    KeyCode::Char(c) => state.input.push(c),
+                                    KeyCode::Backspace => { state.input.pop(); },
+                                    KeyCode::Enter => {
+                                        self.handle_input(&state.input, &tx).await?;
+                                        state.input.clear();
+                                    },
+                                    KeyCode::Up => {
+                                        state.scroll = state.scroll.saturating_sub(1);
+                                        state.auto_scroll = false;
+                                    },
+                                    KeyCode::Down => {
+                                        state.scroll = state.scroll.saturating_add(1);
+                                    },
+                                    KeyCode::Left => {
+                                        state.h_scroll = state.h_scroll.saturating_sub(1);
+                                    },
+                                    KeyCode::Right => {
+                                        state.h_scroll = state.h_scroll.saturating_add(1);
+                                    },
+                                    _ => {},
                                 }
                             },
-                            KeyCode::Char('G') => {
-                                state.scroll = u16::MAX;
-                                state.auto_scroll = true;
-                            },
-                            KeyCode::Char(c) => state.input.push(c),
-                            KeyCode::Backspace => { state.input.pop(); },
-                            KeyCode::Enter => {
-                                self.handle_input(&state.input, &tx).await?;
-                                state.input.clear();
-                            },
-                            KeyCode::Up => {
-                                state.scroll = state.scroll.saturating_sub(1);
-                            },
-                            KeyCode::Down => {
-                                state.scroll = state.scroll.saturating_add(1);
+                            Event::Mouse(mouse_event) => {
+                                match mouse_event.kind {
+                                    crossterm::event::MouseEventKind::ScrollUp => {
+                                        state.scroll = state.scroll.saturating_sub(1);
+                                        state.auto_scroll = false;
+                                    },
+                                    crossterm::event::MouseEventKind::ScrollDown => {
+                                        state.scroll = state.scroll.saturating_add(1);
+                                    },
+                                    crossterm::event::MouseEventKind::ScrollLeft => {
+                                        state.h_scroll = state.h_scroll.saturating_add(1);
+                                    },
+                                    crossterm::event::MouseEventKind::ScrollRight => {
+                                        state.h_scroll = state.h_scroll.saturating_sub(1);
+                                    },
+                                    _ => {},
+                                }
                             },
                             _ => {},
                         }
@@ -349,7 +377,7 @@ impl SwapBytesNode {
 
                 let message_block = Paragraph::new(message_text)
                     .block(Block::default().title("SwapBytes Chat").borders(Borders::ALL))
-                    .scroll((state.scroll, 0));
+                    .scroll((state.scroll, state.h_scroll));
                 f.render_widget(message_block, main_chunks[0]);
 
                 // Input Area
@@ -371,7 +399,7 @@ impl SwapBytesNode {
             })?;
         }
 
-        execute!(std::io::stdout(), LeaveAlternateScreen)?;
+        execute!(std::io::stdout(), LeaveAlternateScreen, crossterm::event::DisableMouseCapture)?;
         disable_raw_mode()?;
         terminal.show_cursor()?;
         Ok(())
