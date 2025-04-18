@@ -40,29 +40,30 @@ use crossterm::{
 };
 use chrono::Local;
 
-// CLI Configuration
+// CLI Configuration for bootstrap address (Peer discovery mechanism)
 #[derive(Parser, Debug)]
 struct Cli {
     #[arg(long)]
     bootstrap: Option<Multiaddr>,
 }
 
-// Network Protocol
+// Define the combined network behaviors for SwapBytes
 #[derive(NetworkBehaviour)]
 struct SwapBytesBehaviour {
-    mdns: mdns::tokio::Behaviour,
-    kademlia: kad::Behaviour<MemoryStore>,
-    gossipsub: gossipsub::Behaviour,
-    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>,
+    mdns: mdns::tokio::Behaviour, // For local peer discovery (Peer discovery mechanism)
+    kademlia: kad::Behaviour<MemoryStore>, // For DHT-based peer discovery (Bonus: Kademlia DHT)
+    gossipsub: gossipsub::Behaviour, // For pubsub chat room (Pubsub chat room)
+    request_response: request_response::cbor::Behaviour<SwapBytesRequest, SwapBytesResponse>, // For direct messages and file requests (Direct messaging & File swapping)
 }
 
-// Message Types
+// Define request types for direct messages and file requests (Direct messaging & File swapping)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesRequest {
     DirectMessage(String),
     FileRequest(String),
 }
 
+// Define response types for acknowledgments and file data (Direct messaging & File swapping)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum SwapBytesResponse {
     Ack,
@@ -80,36 +81,38 @@ impl fmt::Display for SwapBytesResponse {
 
 impl Error for SwapBytesResponse {}
 
-// Chat Message Structure
+// Structure for chat messages displayed in the UI (Simple CLI & Advanced UI with Ratatui)
 struct ChatMessage {
     timestamp: String,
     content: String,
 }
 
-// UI State
+// State for the terminal UI (Simple CLI & Advanced UI with Ratatui)
 struct TuiState {
-    messages: Vec<ChatMessage>,
-    input: String,
-    scroll: u16,
-    h_scroll: u16,     // Horizontal scroll
-    auto_scroll: bool,
+    messages: Vec<ChatMessage>, // List of chat messages
+    input: String, // Current user input
+    scroll: u16, // Vertical scroll position
+    h_scroll: u16, // Horizontal scroll position (Bonus: Additional feature - horizontal scrolling)
+    auto_scroll: bool, // Flag for auto-scrolling to the bottom
 }
 
-// Node State
+// Main node structure holding the swarm and other state
 struct SwapBytesNode {
-    swarm: libp2p::Swarm<SwapBytesBehaviour>,
-    nickname: String,
-    peer_nicknames: HashMap<PeerId, String>,
-    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>,
-    nickname_announced: bool,
-    bootstrap_message: Option<String>,
+    swarm: libp2p::Swarm<SwapBytesBehaviour>, // The libp2p swarm managing connections and behaviors
+    nickname: String, // User's nickname (User-defined nicknames)
+    peer_nicknames: HashMap<PeerId, String>, // Map of peer IDs to nicknames (User-defined nicknames)
+    pending_file_requests: HashMap<libp2p::request_response::OutboundRequestId, String>, // Tracking pending file requests (File swapping)
+    nickname_announced: bool, // Flag to check if nickname has been announced
+    bootstrap_message: Option<String>, // Optional message about bootstrap status (Peer discovery mechanism)
 }
 
 impl SwapBytesNode {
+    // Initialize a new SwapBytes node with peer discovery and network setup
     async fn new(nickname: String, bootstrap: Option<Multiaddr>) -> Result<(Self, String), Box<dyn Error>> {
         let keypair = Keypair::generate_ed25519();
         let peer_id = keypair.public().to_peer_id();
 
+        // Set up the swarm with behaviors for peer discovery, chat, and file swapping
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -126,7 +129,7 @@ impl SwapBytesNode {
                     key.public().to_peer_id(),
                     MemoryStore::new(key.public().to_peer_id()),
                 );
-                kademlia.set_mode(Some(Mode::Server));
+                kademlia.set_mode(Some(Mode::Server)); // Set Kademlia to server mode (Bonus: Kademlia DHT)
                 let gossipsub = gossipsub::Behaviour::new(
                     MessageAuthenticity::Signed(key.clone()),
                     gossipsub::Config::default(),
@@ -148,16 +151,20 @@ impl SwapBytesNode {
             .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
+        // Start listening on a random TCP port for incoming connections
         swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
+        // If a bootstrap address is provided, dial it and add to Kademlia (Peer discovery mechanism)
         if let Some(bootstrap_addr) = bootstrap {
             swarm.dial(bootstrap_addr.clone())?;
             swarm.behaviour_mut().kademlia.add_address(&peer_id, bootstrap_addr);
         }
 
+        // Subscribe to the Gossipsub topic for the chat room (Pubsub chat room)
         let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
         swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
 
+        // Attempt to bootstrap Kademlia and prepare a message if it fails (Bonus: Kademlia DHT)
         let mut bootstrap_message = String::new();
         if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
             bootstrap_message = format!("[SYSTEM]: Kademlia bootstrap failed: {}. Relying on mDNS.", e);
@@ -174,6 +181,7 @@ impl SwapBytesNode {
         Ok((node, bootstrap_message))
     }
 
+    // Announce the user's nickname to the network via Gossipsub (User-defined nicknames & Pubsub chat room)
     async fn announce_nickname(&mut self) -> Result<(), Box<dyn Error>> {
         let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
         let message = format!("JOIN {}", self.nickname);
@@ -184,6 +192,7 @@ impl SwapBytesNode {
         Ok(())
     }
 
+    // Main run loop for the application, handling UI and network events (Simple CLI & Advanced UI with Ratatui)
     async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let (tx, mut rx) = mpsc::channel::<ChatMessage>(100);
         let mut state = TuiState {
@@ -194,7 +203,7 @@ impl SwapBytesNode {
             auto_scroll: true,
         };
 
-        // Initial help messages
+        // Send initial help messages to the UI to guide user interaction
         let timestamp = Local::now().format("%H:%M:%S").to_string();
         tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Available Commands:".to_string() }).await?;
         tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /chat <message> - Send a message to all peers".to_string() }).await?;
@@ -215,6 +224,7 @@ impl SwapBytesNode {
             }).await?;
         }
 
+        // Set up event handling for user input (Simple CLI & Advanced UI with Ratatui)
         let (tx_event, mut rx_event) = mpsc::channel(100);
         let event_tx = tx_event.clone();
         tokio::spawn(async move {
@@ -228,6 +238,7 @@ impl SwapBytesNode {
             }
         });
 
+        // Initialize the Ratatui terminal interface (Advanced UI with Ratatui)
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
         let backend = CrosstermBackend::new(std::io::stdout());
@@ -236,6 +247,7 @@ impl SwapBytesNode {
 
         let mut announcement_interval = interval(Duration::from_secs(10));
 
+        // Main event loop handling UI input, network events, and periodic tasks
         loop {
             select! {
                 event = rx_event.recv() => {
@@ -245,29 +257,29 @@ impl SwapBytesNode {
                                 match key_event.code {
                                     KeyCode::Char('q') => {
                                         if state.input.is_empty() {
-                                            break;
+                                            break; // Exit the application
                                         } else {
                                             state.input.push('q');
                                         }
                                     },
-                                    KeyCode::Char(c) => state.input.push(c),
-                                    KeyCode::Backspace => { state.input.pop(); },
+                                    KeyCode::Char(c) => state.input.push(c), // Append character to input
+                                    KeyCode::Backspace => { state.input.pop(); }, // Remove last character from input
                                     KeyCode::Enter => {
-                                        self.handle_input(&state.input, &tx).await?;
+                                        self.handle_input(&state.input, &tx).await?; // Process user command
                                         state.input.clear();
                                     },
                                     KeyCode::Up => {
-                                        state.scroll = state.scroll.saturating_sub(1);
+                                        state.scroll = state.scroll.saturating_sub(1); // Scroll up
                                         state.auto_scroll = false;
                                     },
                                     KeyCode::Down => {
-                                        state.scroll = state.scroll.saturating_add(1);
+                                        state.scroll = state.scroll.saturating_add(1); // Scroll down
                                     },
                                     KeyCode::Left => {
-                                        state.h_scroll = state.h_scroll.saturating_sub(1);
+                                        state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left (Bonus: Horizontal scrolling)
                                     },
                                     KeyCode::Right => {
-                                        state.h_scroll = state.h_scroll.saturating_add(1);
+                                        state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right (Bonus: Horizontal scrolling)
                                     },
                                     _ => {},
                                 }
@@ -277,7 +289,7 @@ impl SwapBytesNode {
                                 match mouse_event.kind {
                                     crossterm::event::MouseEventKind::ScrollUp => {
                                         if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
-                                            state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left
+                                            state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left with Shift (Bonus: Horizontal scrolling)
                                         } else {
                                             state.scroll = state.scroll.saturating_sub(1); // Scroll up
                                             state.auto_scroll = false;
@@ -285,16 +297,16 @@ impl SwapBytesNode {
                                     },
                                     crossterm::event::MouseEventKind::ScrollDown => {
                                         if modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
-                                            state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right
+                                            state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right with Shift (Bonus: Horizontal scrolling)
                                         } else {
                                             state.scroll = state.scroll.saturating_add(1); // Scroll down
                                         }
                                     },
                                     crossterm::event::MouseEventKind::ScrollLeft => {
-                                        state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left (if supported)
+                                        state.h_scroll = state.h_scroll.saturating_sub(1); // Scroll left (Bonus: Horizontal scrolling)
                                     },
                                     crossterm::event::MouseEventKind::ScrollRight => {
-                                        state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right (if supported)
+                                        state.h_scroll = state.h_scroll.saturating_add(1); // Scroll right (Bonus: Horizontal scrolling)
                                     },
                                     _ => {},
                                 }
@@ -304,18 +316,18 @@ impl SwapBytesNode {
                     }
                 }
                 swarm_event = self.swarm.select_next_some() => {
-                    self.handle_event(swarm_event, &tx).await?;
+                    self.handle_event(swarm_event, &tx).await?; // Handle network events
                 }
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
-                        state.messages.push(msg);
+                        state.messages.push(msg); // Add new message to UI
                         if state.auto_scroll {
-                            state.scroll = u16::MAX;
+                            state.scroll = u16::MAX; // Auto-scroll to bottom
                         }
                     }
                 }
                 _ = announcement_interval.tick() => {
-                    match self.announce_nickname().await {
+                    match self.announce_nickname().await { // Periodically announce nickname (User-defined nicknames)
                         Ok(_) => {
                             if !self.nickname_announced {
                                 tx.send(ChatMessage {
@@ -335,6 +347,7 @@ impl SwapBytesNode {
                 }
             }
 
+            // Draw the Ratatui UI (Advanced UI with Ratatui)
             terminal.draw(|f| {
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
@@ -353,7 +366,7 @@ impl SwapBytesNode {
                     ])
                     .split(chunks[1]);
 
-                // Peer List Sidebar
+                // Render peer list sidebar (User-defined nicknames)
                 let peer_list: Vec<ListItem> = self.peer_nicknames.iter()
                     .filter(|(id, _)| *id != self.swarm.local_peer_id())
                     .map(|(id, nick)| ListItem::new(format!("{}: {}", nick, id.to_string().chars().take(8).collect::<String>())))
@@ -363,7 +376,7 @@ impl SwapBytesNode {
                     .style(Style::default().fg(Color::White));
                 f.render_widget(peer_list_widget, chunks[0]);
 
-                // Chat Messages with Timestamps
+                // Render chat messages with timestamps (Pubsub chat room & Direct messaging)
                 let messages: Vec<Line> = state.messages.iter().map(|msg| {
                     let (prefix, content, color) = if msg.content.starts_with("[SYSTEM]") {
                         ("[SYSTEM]", &msg.content[8..], Color::Gray)
@@ -393,13 +406,13 @@ impl SwapBytesNode {
                     .scroll((state.scroll, state.h_scroll));
                 f.render_widget(message_block, main_chunks[0]);
 
-                // Input Area
+                // Render input area for user commands (Simple CLI)
                 let input_block = Paragraph::new(format!("> {}", state.input))
                     .block(Block::default().title("Input").borders(Borders::ALL))
                     .style(Style::default().fg(Color::Yellow));
                 f.render_widget(input_block, main_chunks[1]);
 
-                // Status Bar
+                // Render status bar showing connection status
                 let status_text = if self.swarm.connected_peers().count() > 0 {
                     format!("Connected (Peers: {})", self.swarm.connected_peers().count())
                 } else {
@@ -412,12 +425,14 @@ impl SwapBytesNode {
             })?;
         }
 
+        // Clean up terminal on exit
         execute!(std::io::stdout(), LeaveAlternateScreen, crossterm::event::DisableMouseCapture)?;
         disable_raw_mode()?;
         terminal.show_cursor()?;
         Ok(())
     }
 
+    // Handle user input commands (Simple CLI)
     async fn handle_input(&mut self, line: &str, tx: &mpsc::Sender<ChatMessage>) -> Result<(), Box<dyn Error>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.is_empty() {
@@ -427,6 +442,7 @@ impl SwapBytesNode {
         let timestamp = Local::now().format("%H:%M:%S").to_string();
         match parts[0] {
             "/help" => {
+                // Display help message with available commands
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Available Commands:".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /chat <message> - Send a message to all peers".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /dm <nickname> <message> - Send a direct message".to_string() }).await?;
@@ -444,7 +460,7 @@ impl SwapBytesNode {
                     let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
                     match self.swarm.behaviour_mut().gossipsub.publish(topic, message.as_bytes()) {
                         Ok(_) => {
-                            tx.send(ChatMessage {
+                            tx.send(ChatMessage { // Send message to all peers (Pubsub chat room)
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[{}]: {}", self.nickname, message),
                             }).await?;
@@ -469,7 +485,7 @@ impl SwapBytesNode {
                         self.swarm
                             .behaviour_mut()
                             .request_response
-                            .send_request(&target_peer, SwapBytesRequest::DirectMessage(message.clone()));
+                            .send_request(&target_peer, SwapBytesRequest::DirectMessage(message.clone())); // Send direct message (Direct messaging)
                         tx.send(ChatMessage {
                             timestamp: Local::now().format("%H:%M:%S").to_string(),
                             content: format!("[DM to {}]: {}", target_nickname, message),
@@ -493,7 +509,7 @@ impl SwapBytesNode {
                         let request_id = self.swarm
                             .behaviour_mut()
                             .request_response
-                            .send_request(&target_peer, SwapBytesRequest::FileRequest(file_name.to_string()));
+                            .send_request(&target_peer, SwapBytesRequest::FileRequest(file_name.to_string())); // Request file from peer (File swapping)
                         self.pending_file_requests.insert(request_id, local_path.to_string());
                         tx.send(ChatMessage {
                             timestamp: Local::now().format("%H:%M:%S").to_string(),
@@ -520,7 +536,7 @@ impl SwapBytesNode {
                 let local_peer_id = *self.swarm.local_peer_id();
                 for (peer_id, nick) in &self.peer_nicknames {
                     if *peer_id != local_peer_id {
-                        tx.send(ChatMessage {
+                        tx.send(ChatMessage { // List all known peers (User-defined nicknames)
                             timestamp: timestamp.clone(),
                             content: format!("- {}: {}", nick, peer_id),
                         }).await?;
@@ -535,6 +551,7 @@ impl SwapBytesNode {
         Ok(())
     }
 
+    // Handle swarm events such as peer discovery, messages, and file transfers
     async fn handle_event(&mut self, event: SwarmEvent<SwapBytesBehaviourEvent>, tx: &mpsc::Sender<ChatMessage>) -> Result<(), Box<dyn Error>> {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
@@ -549,7 +566,7 @@ impl SwapBytesNode {
                         timestamp: Local::now().format("%H:%M:%S").to_string(),
                         content: format!("[SYSTEM]: Discovered peer: {} at {}", peer_id, multiaddr),
                     }).await?;
-                    self.swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr.clone());
+                    self.swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr.clone()); // Add discovered peer to Kademlia (Peer discovery mechanism)
                     self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                 }
             }
@@ -577,7 +594,7 @@ impl SwapBytesNode {
                                 }).await?;
                             }
                         } else {
-                            self.peer_nicknames.insert(source, nickname.clone());
+                            self.peer_nicknames.insert(source, nickname.clone()); // Store new peer nickname (User-defined nicknames)
                             tx.send(ChatMessage {
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[SYSTEM]: {} ({}) joined the chat.", nickname, source),
@@ -585,7 +602,7 @@ impl SwapBytesNode {
                         }
                     } else {
                         if let Some(n) = self.peer_nicknames.get(&source) {
-                            tx.send(ChatMessage {
+                            tx.send(ChatMessage { // Display chat room message (Pubsub chat room)
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[{}]: {}", n, msg),
                             }).await?;
@@ -611,7 +628,7 @@ impl SwapBytesNode {
                         SwapBytesRequest::DirectMessage(msg) => {
                             let peer_str = peer.to_string();
                             let sender = self.peer_nicknames.get(&peer).unwrap_or(&peer_str);
-                            tx.send(ChatMessage {
+                            tx.send(ChatMessage { // Receive direct message (Direct messaging)
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[DM from {}]: {}", sender, msg),
                             }).await?;
@@ -628,7 +645,7 @@ impl SwapBytesNode {
                             self.swarm
                                 .behaviour_mut()
                                 .request_response
-                                .send_response(channel, SwapBytesResponse::FileData(file_data))?;
+                                .send_response(channel, SwapBytesResponse::FileData(file_data))?; // Send requested file data (File swapping)
                         }
                     }
                 }
@@ -644,7 +661,7 @@ impl SwapBytesNode {
                             if let Some(local_path) = self.pending_file_requests.remove(&request_id) {
                                 if !data.is_empty() {
                                     tokio::fs::write(&local_path, &data).await?;
-                                    tx.send(ChatMessage {
+                                    tx.send(ChatMessage { // Save received file (File swapping)
                                         timestamp: Local::now().format("%H:%M:%S").to_string(),
                                         content: format!("[SYSTEM]: File saved to {}", local_path),
                                     }).await?;
@@ -665,18 +682,19 @@ impl SwapBytesNode {
     }
 }
 
+// Main function to set up CLI, get nickname, and run the node
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let cli = Cli::parse();
+    let cli = Cli::parse(); // Parse CLI arguments (Peer discovery mechanism)
 
     let mut stdin = io::BufReader::new(io::stdin()).lines();
     println!("Enter your nickname:");
     let nickname = match stdin.next_line().await {
         Ok(Some(line)) => line.trim().to_string(),
         _ => "Anonymous".to_string(),
-    };
+    }; // Get user-defined nickname (User-defined nicknames)
 
     let (mut node, _) = SwapBytesNode::new(nickname, cli.bootstrap).await?;
-    node.run().await?;
+    node.run().await?; // Start the application
     Ok(())
 }
