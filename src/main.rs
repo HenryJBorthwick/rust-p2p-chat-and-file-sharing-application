@@ -202,6 +202,10 @@ impl SwapBytesNode {
         tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file".to_string() }).await?;
         tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /list - List all known peers".to_string() }).await?;
         tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /help - Display this help message".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Scrolling Controls:".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Arrow keys: Up/Down for vertical, Left/Right for horizontal".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Mouse wheel: Up/Down for vertical scrolling".to_string() }).await?;
+        tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Shift + Mouse wheel: Up/Down for horizontal scrolling".to_string() }).await?;
         tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Press 'q' to quit".to_string() }).await?;
 
         if let Some(bootstrap_message) = self.bootstrap_message.take() {
@@ -429,7 +433,10 @@ impl SwapBytesNode {
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /getfile <nickname> <file_name> <local_path> - Request a file".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /list - List all known peers".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /help - Display this help message".to_string() }).await?;
-                tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Press 'q' to quit".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Scrolling Controls:".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Arrow keys: Up/Down for vertical, Left/Right for horizontal".to_string() }).await?;
+                tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Mouse wheel: Up/Down for vertical scrolling".to_string() }).await?;
+                tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Shift + Mouse wheel: Up/Down for horizontal scrolling".to_string() }).await?;
             }
             "/chat" => {
                 if parts.len() > 1 {
