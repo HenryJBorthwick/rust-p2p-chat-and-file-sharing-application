@@ -1,46 +1,72 @@
+# SwapBytes - P2P Chat and File Sharing Application
 
-on 2 terminals:
-cargo run 
+A peer-to-peer application built with libp2p that enables chat messaging and file sharing between peers.
+
+## Prerequisites
+
+- Rust and Cargo installed
+- Network connectivity
+
+## Quick Start
+
+1. Clone the repository
+2. Navigate to the project directory
+3. Run the application:
+   ```bash
+   cargo run
+   ```
+
+## Usage
+
+### Local Network Discovery
+For local network discovery, simply run:
+```bash
+cargo run
+```
+
+### Cross-Network Connection
+To connect across different networks:
+1. Start a bootstrap node:
+   ```bash
+   cargo run
+   ```
+2. Note the listening address (e.g., `/ip4/127.0.0.1/tcp/56730`)
+(NOTE: To copy from TUI interface hold CTRL and select the address)
+3. Connect other peers using the bootstrap address:
+   ```bash
+   cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
+   ```
+
+### Available Commands
+
+- `/chat <message>` - Send a message to all peers
+- `/dm <nickname> <message>` - Send a direct message
+- `/getfile <nickname> <file_name> <local_path>` - Request a file
+- `/list` - List all known peers
+- `/help` - Display available commands
+
+### UI Controls
+
+- Arrow keys: Up/Down for vertical scrolling, Left/Right for horizontal scrolling
+- Mouse wheel: Up/Down for vertical scrolling
+- Shift + Mouse wheel: Up/Down for horizontal scrolling
+- Press 'q' to quit (NOTE: works only on empty input)
+
+## Example Usage
+
+```bash
+# Terminal 1 (Bootstrap Node)
 cargo run
 
-Test Chat:
-Bob: /chat Hello everyone
-Alice sees: Chat [Bob]: Hello everyone
-Alice: /chat Hi Bob
-Bob sees: Chat [Alice]: Hi Bob
-
-Test DM:
-Bob: /dm Alice Hi There
-Alice sees: DM from Bob: Hi There
-Bob sees: Direct message delivered.
-Alice: /dm Bob Hello
-Bob sees: DM from Alice: Hello
-
-Test File Sharing (if files exist):
-Bob: /getfile Alice notes.txt ./local_notes.txt
-(Assuming Alice has notes.txt, it should save to Bob’s local_notes.txt.)
-
-Test List Peers:
-Bob: /listpeers
-Alice sees: Peers: [Bob]
-
-Alice: /listpeers
-Bob sees: Peers: [Alice]
-
-
-
-to check if works across different networks:
-cargo run
-BootstrapPeer
-
+# Terminal 2 (Peer 1)
 cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
-Bob
 
+# Terminal 3 (Peer 2)
 cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
-Alice
-
+```
 
 ## Notes
 
-local discovery just use cargo run or is a potential bootstrap node
-to connect across networks, need to use -- bootstrap <address> to connect
+- Local discovery works automatically when running without bootstrap address
+- For cross-network connections, use the bootstrap flag with the appropriate address
+- File sharing requires the requested file to exist on the target peer's system
