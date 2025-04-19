@@ -338,10 +338,12 @@ impl SwapBytesNode {
                         }
                     }
                 }
+
                 // handle network events via the handle_event function
                 swarm_event = self.swarm.select_next_some() => {
                     self.handle_event(swarm_event, &tx).await?;
                 }
+                
                 // handle new messages
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
@@ -351,6 +353,7 @@ impl SwapBytesNode {
                         }
                     }
                 }
+                
                 // handle nickname announcement
                 _ = announcement_interval.tick() => {
                     match self.announce_nickname().await {
