@@ -2,7 +2,7 @@
 
 ## Technical Explanation of how the application works
 
-### Application Start
+## Application Start
 
 The application starts in `main.rs` where:
 
@@ -21,7 +21,7 @@ is called and performs the following:
 
    - Calls `SwapBytesNode::new` function
    - User provides nickname and optional bootstrap address
-   - System generates cryptographic identity (ED25519 keypair)
+   - System generates cryptographic identity
    - Creates unique PeerId for node identification
    - Initializes network stack and protocols:
      - TCP transport layer with Noise encryption
@@ -29,23 +29,26 @@ is called and performs the following:
      - Kademlia DHT
      - Gossipsub
      - Request-Response
-   - Sets up peer discovery mechanisms
+     - Sets up peer discovery mechanisms
 
 3. **SwapBytesNode Run Function**
    - Calls `SwapBytesNode::run` function
    - Preps a initial help message to display to the user
-   - Sets up event handling listeners for user inputs
    - Enters the main event loop
      - Handles user keyboard inputs
-       - Handles user command inputs with handle_input function
-     - Handle user mouse inputs
+       - Handles user keyboard command inputs with handle_input function
+     - Handles user mouse inputs
      - Handles network events via the handle_event function
-     - Handles new messages
-     - Handles nickname announcement
-     - TUI interface is drawn and each element is rendered
-     - Runs a clean up when the user quits the application
+       - Peer discovery
+       - Chat message handling
+       - Direct message handling
+       - File transfer handling
+     - Handles new messages (new chat messages)
+     - Handles nickname announcement (new peer joins the network)
+     - TUI interface is drawn and each element is rendered and updated
+   - Runs a clean up when the user quits the application
 
-### Peer Discovery Process
+## Peer Discovery Process
 
 1. **Local Network Discovery (mDNS)**
    - Broadcasts node presence on local network
@@ -117,25 +120,25 @@ is called and performs the following:
 ## User Interface System
 
 1. **Terminal Interface (Ratatui)**
-   - Layout:
+   - Layout components:
      - Peer list (20% width)
      - Chat area (80% width)
-     - Input area
-     - Status bar
+       - Includes Input area
+       - Includes Status bar
    - Features:
      - Real-time message display
      - Command input
-     - Scrollable history
+     - Vertical and Horizontal chat scrolling
      - Peer status updates
 
 2. **Input Processing**
-   - Command parsing:
+   - User Input Command parsing:
      - `/chat` - Broadcast message
      - `/dm` - Direct message
      - `/getfile` - File request
      - `/list` - Peer listing
      - `/help` - Command help
-   - Event handling:
+   - User Interaction Event handling:
      - Keyboard input
      - Mouse scrolling
      - Window resizing
@@ -165,44 +168,7 @@ is called and performs the following:
 
 ## Error Handling System
 
-1. **Network Errors**
-   - Handles:
-     - Connection failures
-     - Timeout errors
-     - Protocol errors
-   - Recovery:
-     - Automatic reconnection
-     - Message retry
-     - Peer rediscovery
+1 **Error Handling**
 
-2. **File System Errors**
-   - Manages:
-     - File not found
-     - Permission errors
-     - Disk space issues
-   - Provides:
-     - Error messages
-     - Recovery options
-     - Status updates
-
-## Performance Optimization
-
-1. **Network Efficiency**
-   - Message propagation:
-     - Mesh optimization
-     - Flood protection
-     - Bandwidth management
-   - Connection handling:
-     - Connection pooling
-     - Timeout management
-     - Resource cleanup
-
-2. **UI Performance**
-   - Message handling:
-     - Efficient buffering
-     - Smart scrolling
-     - Memory optimization
-   - Input processing:
-     - Event batching
-     - Responsive updates
-     - Resource management
+- General errors:
+  - Error handling where obvious to prevent application from crashing

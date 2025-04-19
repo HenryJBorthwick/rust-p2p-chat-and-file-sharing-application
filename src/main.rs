@@ -250,7 +250,7 @@ impl SwapBytesNode {
             }
         });
 
-        // init the TUI terminal interface (Advanced UI)
+        // init the TUI terminal interface
         enable_raw_mode()?;
         execute!(std::io::stdout(), EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
         let backend = CrosstermBackend::new(std::io::stdout());
@@ -376,7 +376,7 @@ impl SwapBytesNode {
                 }
             }
 
-            // TUI drawing and rendering UI elements
+            // handle TUI drawing, rendering and updating UI elements
             terminal.draw(|f| {
                 // creates the horizontal layout for the UI
                 let chunks = Layout::default()
