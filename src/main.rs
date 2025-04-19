@@ -493,8 +493,8 @@ impl SwapBytesNode {
         let timestamp = Local::now().format("%H:%M:%S").to_string();
 
         match parts[0] {
+            // display available commands
             "/help" => {
-                // Display help message with available commands
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: Available Commands:".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /chat <message> - Send a message to all peers".to_string() }).await?;
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - /dm <nickname> <message> - Send a direct message".to_string() }).await?;
@@ -506,13 +506,15 @@ impl SwapBytesNode {
                 tx.send(ChatMessage { timestamp: timestamp.clone(), content: "[SYSTEM]: - Mouse wheel: Up/Down for vertical scrolling".to_string() }).await?;
                 tx.send(ChatMessage { timestamp, content: "[SYSTEM]: - Shift + Mouse wheel: Up/Down for horizontal scrolling".to_string() }).await?;
             }
+
+            // broadcast message to all peers in the pubsub chat room
             "/chat" => {
                 if parts.len() > 1 {
                     let message = parts[1..].join(" ");
                     let topic = IdentTopic::new("/swapbytes/chat/1.0.0");
                     match self.swarm.behaviour_mut().gossipsub.publish(topic, message.as_bytes()) {
                         Ok(_) => {
-                            tx.send(ChatMessage { // Send message to all peers in pubsub chat room
+                            tx.send(ChatMessage {
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[{}]: {}", self.nickname, message),
                             }).await?;
@@ -527,6 +529,8 @@ impl SwapBytesNode {
                     }
                 }
             }
+
+            // send direct message to a specific peer with the request response
             "/dm" => {
                 if parts.len() > 2 {
                     let target_nickname = parts[1];
@@ -551,6 +555,8 @@ impl SwapBytesNode {
                     }
                 }
             }
+
+            // request a file from a specific peer with the request response
             "/getfile" => {
                 if parts.len() == 4 {
                     let target_nickname = parts[1];
@@ -582,6 +588,8 @@ impl SwapBytesNode {
                     }).await?;
                 }
             }
+
+            // list all known peers using nicknames excluding self
             "/list" => {
                 tx.send(ChatMessage {
                     timestamp: timestamp.clone(),
@@ -590,13 +598,14 @@ impl SwapBytesNode {
                 let local_peer_id = *self.swarm.local_peer_id();
                 for (peer_id, nick) in &self.peer_nicknames {
                     if *peer_id != local_peer_id {
-                        tx.send(ChatMessage { // List all known peers by their user defined nicknames
+                        tx.send(ChatMessage {
                             timestamp: timestamp.clone(),
                             content: format!("- {}: {}", nick, peer_id),
                         }).await?;
                     }
                 }
             }
+            // handle unknown commands
             _ => tx.send(ChatMessage {
                 timestamp,
                 content: format!("[SYSTEM]: Unknown command: {}", parts[0]),
@@ -608,42 +617,53 @@ impl SwapBytesNode {
     // ------------------------------------------------------------------------------------------------
     // Handle Event Function
     // ------------------------------------------------------------------------------------------------
-    // handles swarm events such as peer discovery, messages, and file transfers. Called from the run function.
+    // handles network events from libp2p swarm like peer discovery, messages, and file transfers. Called from the run function.
     async fn handle_event(&mut self, event: SwarmEvent<SwapBytesBehaviourEvent>, tx: &mpsc::Sender<ChatMessage>) -> Result<(), Box<dyn Error>> {
+        // match the event type and handle accordingly
         match event {
+            // inform user of address the node is listening on
             SwarmEvent::NewListenAddr { address, .. } => {
                 tx.send(ChatMessage {
                     timestamp: Local::now().format("%H:%M:%S").to_string(),
                     content: format!("[SYSTEM]: Listening on {}", address),
                 }).await?;
             }
+
+            // handle peer discovery events via mDNS initially
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
                     tx.send(ChatMessage {
                         timestamp: Local::now().format("%H:%M:%S").to_string(),
                         content: format!("[SYSTEM]: Discovered peer: {} at {}", peer_id, multiaddr),
                     }).await?;
-                    // Add discovered peer to Kademlia
-                    self.swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr.clone()); 
+                    // add discovered peer to Kademlia for routing
+                    self.swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr.clone());
+                    // add peer to gossipsub for pubsub messaging
                     self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                 }
             }
+
+            // handle peer successful connection events
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 tx.send(ChatMessage {
                     timestamp: Local::now().format("%H:%M:%S").to_string(),
                     content: format!("[SYSTEM]: Connected to peer: {}", peer_id),
                 }).await?;
             }
+
+            // handle pubsub messages
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                 message,
                 ..
             })) => {
                 let msg = String::from_utf8_lossy(&message.data);
                 if let Some(source) = message.source {
+                    // handle nickname announcement to chat
                     if msg.starts_with("JOIN ") {
                         let nickname = msg.trim_start_matches("JOIN ").to_string();
                         if self.peer_nicknames.contains_key(&source) {
                             let existing_nick = self.peer_nicknames.get(&source).unwrap();
+                            // update nickname if it has changed
                             if existing_nick != &nickname {
                                 self.peer_nicknames.insert(source, nickname.clone());
                                 tx.send(ChatMessage {
@@ -659,12 +679,15 @@ impl SwapBytesNode {
                                 content: format!("[SYSTEM]: {} ({}) joined the chat.", nickname, source),
                             }).await?;
                         }
+                    // handle pubsub messages from peers in chat
                     } else {
+                        // display message with source nickname
                         if let Some(n) = self.peer_nicknames.get(&source) {
                             tx.send(ChatMessage { // Display chat room message (Pubsub chat room)
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: format!("[{}]: {}", n, msg),
                             }).await?;
+                        // display message without source
                         } else {
                             tx.send(ChatMessage {
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
@@ -673,17 +696,23 @@ impl SwapBytesNode {
                         }
                     }
                 } else {
+                    // display message without source
                     tx.send(ChatMessage {
                         timestamp: Local::now().format("%H:%M:%S").to_string(),
                         content: format!("[SYSTEM]: Received message without source: {}", msg),
                     }).await?;
                 }
             }
+
+            // handle request response messages
             SwarmEvent::Behaviour(SwapBytesBehaviourEvent::RequestResponse(
                 request_response::Event::Message { peer, message, .. }
             )) => match message {
+
+                // handle request
                 request_response::Message::Request { request, channel, .. } => {
                     match request {
+                        // handle direct message request
                         SwapBytesRequest::DirectMessage(msg) => {
                             let peer_str = peer.to_string();
                             let sender = self.peer_nicknames.get(&peer).unwrap_or(&peer_str);
@@ -696,6 +725,8 @@ impl SwapBytesNode {
                                 .request_response
                                 .send_response(channel, SwapBytesResponse::Ack)?;
                         }
+
+                        // handle file request
                         SwapBytesRequest::FileRequest(file_name) => {
                             let mut file_data = Vec::new();
                             if let Ok(mut file) = File::open(&file_name).await {
@@ -709,22 +740,29 @@ impl SwapBytesNode {
                         }
                     }
                 }
+
+                // handle response
                 request_response::Message::Response { request_id, response } => {
                     match response {
+                        // handle direct message response
                         SwapBytesResponse::Ack => {
                             tx.send(ChatMessage {
                                 timestamp: Local::now().format("%H:%M:%S").to_string(),
                                 content: "[SYSTEM]: Direct message delivered.".to_string(),
                             }).await?;
                         }
+
+                        // handle file response
                         SwapBytesResponse::FileData(data) => {
                             if let Some(local_path) = self.pending_file_requests.remove(&request_id) {
+                                // save file to local path
                                 if !data.is_empty() {
                                     tokio::fs::write(&local_path, &data).await?;
                                     tx.send(ChatMessage { // Save received file
                                         timestamp: Local::now().format("%H:%M:%S").to_string(),
                                         content: format!("[SYSTEM]: File saved to {}", local_path),
                                     }).await?;
+                                // display error if file is not found or empty
                                 } else {
                                     tx.send(ChatMessage {
                                         timestamp: Local::now().format("%H:%M:%S").to_string(),
@@ -736,6 +774,7 @@ impl SwapBytesNode {
                     }
                 }
             },
+            // handle unknown events
             _ => {}
         }
         Ok(())
