@@ -70,3 +70,4 @@ cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
 - Local discovery works automatically when running without bootstrap address
 - For cross-network connections, use the bootstrap flag with the appropriate address
 - File sharing requires the requested file to exist on the target peer's system
+- Allow time for peer discovery may take a few seconds for late joiners to be discovered.
