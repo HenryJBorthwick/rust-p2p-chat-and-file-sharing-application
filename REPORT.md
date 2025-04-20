@@ -168,7 +168,10 @@ is called and performs the following:
 
 ## Error Handling System
 
-1 **Error Handling**
+1. **Error Handling**
 
 - General errors:
   - Error handling where obvious to prevent application from crashing
+
+## Any challenges you faced, and how you approached them
+
