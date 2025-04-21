@@ -48,8 +48,8 @@ To connect across different networks:
 ### UI Controls
 
 - Arrow keys: Up/Down for vertical scrolling, Left/Right for horizontal scrolling
-- Mouse wheel: Up/Down for vertical scrolling
-- Shift + Mouse wheel: Up/Down for horizontal scrolling
+- Mouse: Up/Down for vertical scrolling
+- Shift + Mouse: Up/Down for horizontal scrolling
 - Press 'q' to quit (NOTE: works only on empty input)
 
 ## Example Usage
@@ -70,4 +70,4 @@ cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
 - Local discovery works automatically when running without bootstrap address
 - For cross-network connections, use the bootstrap flag with the appropriate address
 - File sharing requires the requested file to exist on the target peer's system
-- Allow time for peer discovery may take a few seconds for late joiners to be discovered.
+- Allow time for peer discovery may take a few seconds for late joiners to be discovered and synced up.

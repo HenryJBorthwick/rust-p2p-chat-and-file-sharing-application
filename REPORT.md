@@ -350,12 +350,21 @@ The timestamp synchronization issue was resolved by shifting from generating tim
 ### Code Quality: Is the code well-structured and easy to understand
 
 - Code is structured logically with separate sections for CLI configuration, request/response types, network behaviors, UI structures, and the core application.
-- Code is well documented with comments explaining the purpose of sections and key fucntions
+- Code is well documented with comments explaining the purpose of sections and key functions
 - Code is readable with descriptive names
 
 ### Documentation: Are the instructions clear and the report well-written
 
+- README.md contains clear instructions on how to run your application
+- REPORT.md contains well written technical explanations of how the application works, challenges faced and how they were overcome and a estimate of what grade you think is deserved based on the provided guidelines.
+
 ### Creativity: Are there any additional features or enhancements
 
 - Application implements bonus features:
-- A TUI interface for the chat with vertical and horizontal scrolling.
+  - A advanced `Ratatui` TUI interface for the chat with vertical and horizontal chat scrolling, connection status bar, discovered peers side panel and colour coded messages.
+  - Used the `chrono` create to store and display timestamps for each message.
+  - Dual peer discovery mechanisms via mDNS and Kademlia.
+
+### Total Self-Assessed Grade
+
+- A range
