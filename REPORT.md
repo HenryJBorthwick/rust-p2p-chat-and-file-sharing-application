@@ -2,7 +2,7 @@
 
 ## Technical Explanation of how the application works
 
-## Application Start
+### Application Start
 
 The application starts in `main.rs` where:
 
@@ -36,19 +36,19 @@ is called and performs the following:
    - Preps a initial help message to display to the user
    - Enters the main event loop
      - Handles user keyboard inputs
-       - Handles user keyboard command inputs with handle_input function
+       - Handles user keyboard command inputs with `handle_input` function
      - Handles user mouse inputs
-     - Handles network events via the handle_event function
+     - Handles network events via the `handle_event` function
        - Peer discovery
        - Chat message handling
        - Direct message handling
        - File transfer handling
      - Handles new messages (new chat messages)
-     - Handles nickname announcement (new peer joins the network)
+     - Handles nickname announcement via `announce_nickname` function (new peer joins the network)
      - TUI interface is drawn and each element is rendered and updated
    - Runs a clean up when the user quits the application
 
-## Peer Discovery Process
+### Peer Discovery Process
 
 1. **Local Network Discovery (mDNS)**
    - Broadcasts node presence on local network
@@ -68,7 +68,7 @@ is called and performs the following:
      - Begins DHT queries
    - Updates peer list in real-time
 
-## Message Handling System
+### Message Handling System
 
 1. **Chat Messages (Gossipsub)**
    - User types message and sends via `/chat` command
@@ -93,7 +93,7 @@ is called and performs the following:
      4. Waits for acknowledgment
      5. Updates UI with delivery status
 
-## File Transfer System
+### File Transfer System
 
 1. **File Request Process**
    - User initiates with `/getfile` command
@@ -117,7 +117,7 @@ is called and performs the following:
      3. Verifies transfer completion
      4. Updates UI with status
 
-## User Interface System
+### User Interface System
 
 1. **Terminal Interface (Ratatui)**
    - Layout components:
@@ -143,7 +143,7 @@ is called and performs the following:
      - Mouse scrolling
      - Window resizing
 
-## State Management
+### State Management
 
 1. **Peer State**
    - Maintains:
@@ -166,7 +166,7 @@ is called and performs the following:
      - Error recovery
      - Progress updates
 
-## Error Handling System
+### Error Handling System
 
 1. **Error Handling**
 
@@ -277,4 +277,56 @@ The issue was resolved through a multi-step approach:
    - Discovered that this was due to the terminal not supporting horizontal scrolling. And that different terminals supported different ways of scrolling.
    - Added support for Shift + vertical scrolling to allow horizontal scrolling and cross terminal compatibility.
 
-### Challenge: 
+### Challenge: Timestamp Synchronization in Chat Messages
+
+Another challenge faced was getting timestamps for each message sent or received using the `chrono` crate. However, the all timestamps displayed in the chat would then periodically update to the current time.
+
+**Problem Flow:**
+
+- start application and sent and recived messages are displayed in chat with different timestamps.
+- after a period of time all timestamps displayed are updated to the current time.
+
+### Handling: Timestamp Synchronization in Chat Messages
+
+**Problem Solution:**
+
+The timestamp synchronization issue was resolved by shifting from generating timestamps during UI rendering to storing them with each message at creation time:
+
+1. **Updated the `ChatMessage` Structure**  
+   - include a `timestamp` field for each message to carry its own timestamp:
+  
+   ```rust
+   struct ChatMessage {
+       timestamp: String,
+       content: String,
+   }
+   ```
+
+2. **Generated Timestamp at Message Creation**  
+   - When a new message is sent or received, the timestamp is generated using `chrono::Local::now()` and stored with the message.
+
+   ```rust
+   let timestamp = Local::now().format("%H:%M:%S").to_string();
+   let new_message = ChatMessage {
+       timestamp,
+       content: format!("[{}]: {}", self.nickname, message),
+   };
+   state.messages.push(new_message);
+   ```
+
+   - The timestamp now reflects the actual time instead of when it's displayed.
+
+3. **Used Stored Timestamp in Rendering**  
+   - rendering logic then uses the stored `timestamp` from each `ChatMessage` instead of recalculating it.
+
+   ```rust
+   let messages: Vec<Line> = state.messages.iter().map(|msg| {
+       Line::from(vec![
+           Span::styled(format!("[{}] ", msg.timestamp), Style::default().fg(Color::Gray)),
+           Span::styled(msg.content.as_str(), Style::default().fg(Color::White)),
+       ])
+   }).collect();
+   ```
+
+   - each message displays timestamp, unaffected by UI refreshes.
+ß
