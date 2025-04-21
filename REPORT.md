@@ -329,4 +329,33 @@ The timestamp synchronization issue was resolved by shifting from generating tim
    ```
 
    - each message displays timestamp, unaffected by UI refreshes.
-ß
+
+## Link to repo
+
+[SwapBytes Repo](https://eng-git.canterbury.ac.nz)
+
+## Estimation for what grade you think you deserve
+
+### Correctness: Does the application work as expected
+
+- Application implements all required features:
+  - CLI interface for users to send and receive messages and files.
+  - Peers have a user defined nickname, and can be used to identify other peers for direct messaging and file sharing.
+  - Pubsub chat room for users to propose file they want and what files they are willing to share.
+  - Peers who have connected for a trade in the chat room can send direct messages to each other.
+  - Peers once they agree to swap can send the files to each other using a request response pattern.
+  - There is a mechanism to bootstrap peer discovery via mDNS and Kademlia.
+- Application has error handling present.
+
+### Code Quality: Is the code well-structured and easy to understand
+
+- Code is structured logically with separate sections for CLI configuration, request/response types, network behaviors, UI structures, and the core application.
+- Code is well documented with comments explaining the purpose of sections and key fucntions
+- Code is readable with descriptive names
+
+### Documentation: Are the instructions clear and the report well-written
+
+### Creativity: Are there any additional features or enhancements
+
+- Application implements bonus features:
+- A TUI interface for the chat with vertical and horizontal scrolling.
