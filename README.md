@@ -85,8 +85,29 @@ cargo run -- --bootstrap /ip4/127.0.0.1/tcp/56730
 cargo run
 ```
 
+### Command Examples
+
+```bash
+# Send a broadcast message to all peers
+/chat Hello from Alice!
+
+# Send a direct message to a specific peer
+/dm Bob Hey Bob, can you send me that file?
+
+# Request a file from a peer
+/getfile Bob secret_document.txt ./downloads/
+
+# List all known peers
+/list
+
+# Display help
+/help
+```
+
 ## Notes
 
 - Local discovery works automatically when running without bootstrap address
 - File sharing requires the requested file to exist on the target peer's system
 - Allow time for peer discovery may take a few seconds for late joiners to be discovered and synced up.
+- File storage locations:
+  - When using `./<filename>` as the local path, files will be saved in the root directory where `cargo run` was executed
