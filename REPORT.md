@@ -1,4 +1,5 @@
-# SwapBytes
+# COSC 473 Assignment 2 Report - SwapBytes P2P Chat and File Sharing Application
+
 
 ## Technical Explanation of how the application works
 
