@@ -51,7 +51,7 @@ is called and performs the following:
 
 ### Peer Discovery Process
 
-1. **Local Network Discovery (mDNS)**
+1. **mDNS Network Discovery**
    - Broadcasts node presence on local network
    - Listens for other nodes' announcements
    - When peer discovered:
@@ -60,14 +60,13 @@ is called and performs the following:
      - Exchanges peer information
      - Updates UI with new peer
 
-2. **Global Network Discovery (Kademlia)**
+2. **Kademlia Network Discovery**
    - Maintains distributed routing table
    - Performs iterative peer lookups
    - Bootstrap process:
      - Connects to bootstrap node
      - Downloads initial peer list
      - Begins DHT queries
-   - Updates peer list in real-time
 
 ### Message Handling System
 
@@ -77,7 +76,7 @@ is called and performs the following:
      1. Signs message with node's private key
      2. Publishes to chat topic
      3. Gossipsub protocol:
-        - Propagates message through mesh network
+        - Propagates message through network
         - Ensures message delivery to all subscribers
         - Handles message deduplication
      4. Receiving nodes:
@@ -103,8 +102,7 @@ is called and performs the following:
      2. Creates file request
      3. Establishes direct connection
      4. Sends request with filename
-     5. Tracks request status
-     6. Updates UI with progress
+     5. Updates UI with progress
 
 2. **File Transfer Protocol**
    - Request handling:
@@ -124,10 +122,10 @@ is called and performs the following:
    - Layout components:
      - Peer list (20% width)
      - Chat area (80% width)
-       - Includes Input area
-       - Includes Status bar
+       - Includes Text input area
+       - Includes Connection status bar
    - Features:
-     - Real-time message display
+     - Real time message display
      - Command input
      - Vertical and Horizontal chat scrolling
      - Peer status updates
@@ -172,7 +170,7 @@ is called and performs the following:
 1. **Error Handling**
 
 - General errors:
-  - Error handling where obvious to prevent application from crashing
+  - Error handling to prevent application from crashing
 
 ## Any challenges you faced, and how you approached them
 
@@ -333,7 +331,7 @@ The timestamp synchronization issue was resolved by shifting from generating tim
 
 ## Link to repo
 
-[SwapBytes Repo](https://eng-git.canterbury.ac.nz)
+[SwapBytes Assignment Repo](https://eng-git.canterbury.ac.nz/hbo50/henry-borthwick-cosc473-assignments)
 
 ## Estimation for what grade you think you deserve
 
@@ -350,14 +348,14 @@ The timestamp synchronization issue was resolved by shifting from generating tim
 
 ### Code Quality: Is the code well-structured and easy to understand
 
-- Code is structured logically with separate sections for CLI configuration, request/response types, network behaviors, UI structures, and the core application.
+- Code is organized logically with separate sections for CLI configuration, request/response types, network behaviors, UI structures, and the core application.
 - Code is well documented with comments explaining the purpose of sections and key functions
 - Code is readable with descriptive names
 
 ### Documentation: Are the instructions clear and the report well-written
 
 - README.md contains clear instructions on how to run your application
-- REPORT.md contains well written technical explanations of how the application works, challenges faced and how they were overcome and a estimate of what grade you think is deserved based on the provided guidelines.
+- REPORT.md contains well written technical explanations of how the application works, challenges faced and how they were overcome, a link to the repo, and a estimate of what grade you think is deserved based on the provided guidelines.
 
 ### Creativity: Are there any additional features or enhancements
 
