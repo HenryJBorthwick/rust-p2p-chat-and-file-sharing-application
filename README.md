@@ -110,4 +110,4 @@ cargo run
 - File sharing requires the requested file to exist on the target peer's system
 - Allow time for peer discovery may take a few seconds for late joiners to be discovered and synced up.
 - File storage locations:
-  - When using `./<filename>` as the local path, files will be saved in the root directory where `cargo run` was executed
+  - When using `./<filename>` as the local path, files will be both read from and saved to the root directory where `cargo run` was executed
