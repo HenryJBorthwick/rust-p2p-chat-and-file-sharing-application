@@ -1,6 +1,6 @@
 # SwapBytes - P2P Chat and File Sharing Application
 
-A peer-to-peer application built with libp2p that enables chat messaging and file sharing between peers.
+A peer-to-peer application built with libp2p that enables chat messaging and file sharing between peers. [Link to project recordings](https://drive.google.com/drive/folders/1l3dRC8Xoe5sIWdJNtHJkqTVCakvrLaIG?usp=drive_link)
 
 ## Prerequisites
 
